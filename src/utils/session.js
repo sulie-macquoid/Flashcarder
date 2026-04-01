@@ -26,12 +26,15 @@ function insertWithinNextFewCards(queue, cardId) {
 }
 
 export function createLearnSession(cards, options = {}) {
-  const orderedCards = shuffleArray(cards.map((card) => card.id));
+  const originalOrder = cards.map((card) => card.id);
+  const orderedCards = options.shuffle ? shuffleArray(originalOrder) : originalOrder;
   const currentCardId = orderedCards[0] ?? null;
 
   return {
     setId: options.setId ?? null,
     infiniteMode: Boolean(options.infiniteMode),
+    originalOrder,
+    shuffled: Boolean(options.shuffle),
     queue: orderedCards,
     completedCardIds: [],
     currentCardId,
@@ -42,6 +45,32 @@ export function createLearnSession(cards, options = {}) {
       unknown: 0,
     },
     history: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function toggleReviewShuffle(session) {
+  if (!session.currentCardId) {
+    return session;
+  }
+
+  const currentCardId = session.currentCardId;
+  const remaining = session.queue.filter((cardId) => cardId !== currentCardId);
+  const nextRemaining = session.shuffled
+    ? session.originalOrder.filter(
+        (cardId) =>
+          cardId !== currentCardId &&
+          remaining.includes(cardId) &&
+          !session.completedCardIds.includes(cardId),
+      )
+    : shuffleArray(remaining);
+
+  return {
+    ...session,
+    queue: [currentCardId, ...nextRemaining],
+    currentCardId,
+    revealed: false,
+    shuffled: !session.shuffled,
     updatedAt: new Date().toISOString(),
   };
 }

@@ -14,6 +14,7 @@ import {
   getQuizCompletion,
   isQuizComplete,
   revealLearnAnswer,
+  toggleReviewShuffle,
   undoLearnAnswer,
   undoQuizAnswer,
 } from "../utils/session";
@@ -414,6 +415,7 @@ export const useAppStore = create((set, get) => ({
           reviewSession: createLearnSession(studySet.cards, {
             setId,
             infiniteMode: options.infiniteMode,
+            shuffle: Boolean(options.shuffle),
           }),
         })),
       };
@@ -487,6 +489,18 @@ export const useAppStore = create((set, get) => ({
             reviewSession: restored,
           };
         }),
+      };
+    }),
+  toggleFlashcardShuffle: (setId) =>
+    set((state) => {
+      const userId = state.currentUserId;
+      return {
+        progressByUser: withSetProgress(state, userId, setId, (current) => ({
+          ...current,
+          reviewSession: current.reviewSession
+            ? toggleReviewShuffle(current.reviewSession)
+            : current.reviewSession,
+        })),
       };
     }),
   startLearnSession: (setId) =>
@@ -583,7 +597,7 @@ export const useAppStore = create((set, get) => ({
     }
 
     if (!progress.reviewSession) {
-      get().startFlashcardSession(setId);
+      get().startFlashcardSession(setId, { shuffle: false });
     }
   },
   getCurrentUser: () => {

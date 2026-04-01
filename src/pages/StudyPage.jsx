@@ -41,6 +41,7 @@ export default function StudyPage() {
   const revealFlashcardAnswer = useAppStore((state) => state.revealFlashcardAnswer);
   const answerFlashcardCard = useAppStore((state) => state.answerFlashcardCard);
   const undoFlashcardAnswer = useAppStore((state) => state.undoFlashcardAnswer);
+  const toggleFlashcardShuffle = useAppStore((state) => state.toggleFlashcardShuffle);
   const startLearnSession = useAppStore((state) => state.startLearnSession);
   const resumeLearnSession = useAppStore((state) => state.resumeLearnSession);
   const answerLearn = useAppStore((state) => state.answerLearnCard);
@@ -236,6 +237,13 @@ export default function StudyPage() {
                     <div className="flex flex-wrap gap-3">
                       <button
                         type="button"
+                        onClick={() => toggleFlashcardShuffle(setId)}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
+                      >
+                        {flashcardSession.shuffled ? "Unshuffle" : "Shuffle"}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => resumeFlashcardSession(setId, infiniteMode)}
                         className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
                       >
@@ -245,8 +253,8 @@ export default function StudyPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm("Restart this flashcard review from a fresh shuffle?")) {
-                            startFlashcardSession(setId, { infiniteMode });
+                          if (window.confirm("Restart this flashcard review from the beginning?")) {
+                            startFlashcardSession(setId, { infiniteMode, shuffle: false });
                           }
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
