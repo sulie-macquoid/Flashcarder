@@ -148,22 +148,22 @@ export const useAppStore = create((set, get) => ({
       };
     }),
   createFolder: ({ name, description = "" }) =>
-    set((state) => {
-      const userId = state.currentUserId;
-      return {
-        folders: [
-          ...state.folders,
-          {
-            id: generateId("folder"),
-            userId,
-            name: name.trim(),
-            description: description.trim(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ],
+    {
+      const folder = {
+        id: generateId("folder"),
+        userId: get().currentUserId,
+        name: name.trim(),
+        description: description.trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-    }),
+
+      set((state) => ({
+        folders: [...state.folders, folder],
+      }));
+
+      return folder;
+    },
   updateFolder: (folderId, updates) =>
     set((state) => ({
       folders: state.folders.map((folder) =>

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, FolderPlus, Save } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import CardEditor from "../components/CardEditor";
 import EmptyState from "../components/EmptyState";
 import ImportExportPanel from "../components/ImportExportPanel";
+import Modal from "../components/Modal";
 import { useAppStore } from "../store/useAppStore";
 import { generateId, sortByUpdatedAt } from "../utils/helpers";
 
@@ -23,6 +24,7 @@ export default function SetEditorPage() {
   const allSets = useAppStore((state) => state.sets);
   const allFolders = useAppStore((state) => state.folders);
   const saveSet = useAppStore((state) => state.saveSet);
+  const createFolder = useAppStore((state) => state.createFolder);
   const existingSet = useMemo(
     () => (setId ? allSets.find((item) => item.id === setId) ?? null : null),
     [allSets, setId],
@@ -43,6 +45,9 @@ export default function SetEditorPage() {
     existingSet?.cards?.length ? existingSet.cards : [createBlankCard(), createBlankCard()],
   );
   const [error, setError] = useState("");
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderDescription, setNewFolderDescription] = useState("");
 
   const hasValidCards = useMemo(
     () => cards.some((card) => card.front.trim() && card.back.trim()),
@@ -57,6 +62,25 @@ export default function SetEditorPage() {
 
   function removeCard(cardId) {
     setCards((current) => current.filter((card) => card.id !== cardId));
+  }
+
+  function handleCreateFolder() {
+    const trimmedName = newFolderName.trim();
+    if (!trimmedName) {
+      setError("Folder name is required.");
+      return;
+    }
+
+    const folder = createFolder({
+      name: trimmedName,
+      description: newFolderDescription,
+    });
+
+    setFolderId(folder.id);
+    setNewFolderName("");
+    setNewFolderDescription("");
+    setFolderModalOpen(false);
+    setError("");
   }
 
   function submitSet() {
@@ -122,7 +146,17 @@ export default function SetEditorPage() {
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Folder</span>
+                <span className="flex items-center justify-between gap-3 text-sm font-medium">
+                  <span>Folder</span>
+                  <button
+                    type="button"
+                    onClick={() => setFolderModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-medium"
+                  >
+                    <FolderPlus size={14} />
+                    New folder
+                  </button>
+                </span>
                 <select
                   value={folderId}
                   onChange={(event) => setFolderId(event.target.value)}
@@ -209,6 +243,42 @@ export default function SetEditorPage() {
           />
         </aside>
       </div>
+
+      <Modal
+        open={folderModalOpen}
+        title="Create folder"
+        description="Make a new folder without leaving set creation."
+        onClose={() => setFolderModalOpen(false)}
+      >
+        <div className="space-y-4">
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Folder name</span>
+            <input
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              className="w-full rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 outline-none dark:bg-slate-950/30"
+              placeholder="Midterm Revision"
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Description</span>
+            <textarea
+              value={newFolderDescription}
+              onChange={(event) => setNewFolderDescription(event.target.value)}
+              rows={4}
+              className="w-full rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 outline-none dark:bg-slate-950/30"
+              placeholder="Optional note about what belongs in this folder"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleCreateFolder}
+            className="rounded-full bg-[var(--secondary)] px-5 py-3 font-semibold text-white"
+          >
+            Create folder and use it
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
