@@ -12,12 +12,14 @@ export default function AuthPage() {
   const [mode, setMode] = useState("signup");
   const [form, setForm] = useState(defaultForm);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const signUp = useAppStore((state) => state.signUp);
   const logIn = useAppStore((state) => state.logIn);
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
     try {
       if (!form.email.trim() || !form.password.trim()) {
@@ -28,12 +30,14 @@ export default function AuthPage() {
         if (!form.name.trim()) {
           throw new Error("Name is required to create an account.");
         }
-        signUp(form);
+        await signUp(form);
       } else {
-        logIn(form);
+        await logIn(form);
       }
     } catch (submitError) {
       setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -143,9 +147,14 @@ export default function AuthPage() {
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full rounded-full bg-[var(--secondary)] px-5 py-4 text-base font-semibold text-white"
             >
-              {mode === "signup" ? "Create local account" : "Log in"}
+              {isSubmitting
+                ? "Working..."
+                : mode === "signup"
+                  ? "Create account"
+                  : "Log in"}
             </button>
           </form>
         </section>

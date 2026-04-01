@@ -34,18 +34,34 @@ function getUserProgress(state, userId) {
 
 function getSetProgress(state, userId, setId) {
   const userProgress = getUserProgress(state, userId);
-  return (
-    userProgress.setProgress[setId] ?? {
-      completedCardIds: [],
-      flaggedCardIds: [],
-      reviewSession: null,
-      quizSession: null,
-      stats: {
-        totalKnown: 0,
-        totalUnknown: 0,
-      },
-    }
-  );
+  const rawProgress = userProgress.setProgress[setId] ?? {};
+  const legacyReviewSession =
+    rawProgress.reviewSession ?? rawProgress.learnSession ?? null;
+
+  return {
+    completedCardIds: Array.isArray(rawProgress.completedCardIds)
+      ? rawProgress.completedCardIds
+      : [],
+    flaggedCardIds: Array.isArray(rawProgress.flaggedCardIds)
+      ? rawProgress.flaggedCardIds
+      : [],
+    reviewSession: legacyReviewSession,
+    quizSession:
+      rawProgress.quizSession &&
+      typeof rawProgress.quizSession === "object" &&
+      Array.isArray(rawProgress.quizSession.queue)
+        ? {
+            ...rawProgress.quizSession,
+            options: Array.isArray(rawProgress.quizSession.options)
+              ? rawProgress.quizSession.options
+              : [],
+          }
+        : null,
+    stats: {
+      totalKnown: rawProgress.stats?.totalKnown ?? 0,
+      totalUnknown: rawProgress.stats?.totalUnknown ?? 0,
+    },
+  };
 }
 
 function withSetProgress(state, userId, setId, updater) {

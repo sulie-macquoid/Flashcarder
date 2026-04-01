@@ -93,6 +93,12 @@ export default function StudyPage() {
   const hasValidQuizSession =
     Boolean(quizSession?.currentCardId) && Array.isArray(quizSession?.options);
 
+  useEffect(() => {
+    if (mode === "learn" && !hasValidQuizSession && studySet) {
+      startLearnSession(setId);
+    }
+  }, [hasValidQuizSession, mode, setId, startLearnSession, studySet]);
+
   const flashcardCard = useMemo(() => {
     if (!studySet || !flashcardSession?.currentCardId) {
       return null;
