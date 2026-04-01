@@ -6,6 +6,7 @@ import SetEditorPage from "./pages/SetEditorPage";
 import StudyPage from "./pages/StudyPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import AppLayout from "./components/AppLayout";
+import StudyErrorBoundary from "./components/StudyErrorBoundary";
 import { useAppStore } from "./store/useAppStore";
 
 function AppBootstrap() {
@@ -55,7 +56,14 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="sets/new" element={<SetEditorPage />} />
           <Route path="sets/:setId/edit" element={<SetEditorPage />} />
-          <Route path="sets/:setId/study" element={<StudyPage />} />
+          <Route
+            path="sets/:setId/study"
+            element={
+              <StudyErrorBoundary>
+                <StudyPage />
+              </StudyErrorBoundary>
+            }
+          />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

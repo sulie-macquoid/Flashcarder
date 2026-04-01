@@ -443,7 +443,7 @@ export const useAppStore = create((set, get) => ({
       }));
 
       await saveOwnerState(extractOwnerSnapshot(get()));
-    } catch {
+    } catch (error) {
       set((state) => ({
         ui: {
           ...state.ui,
@@ -452,8 +452,7 @@ export const useAppStore = create((set, get) => ({
             {
               id: "sync-warning",
               type: "warning",
-              message:
-                "Cloud sync is unavailable right now, so this device is using its local saved copy.",
+              message: `Sync warning: ${error instanceof Error ? error.message : "this device is using its local saved copy right now."}`,
             },
           ],
         },

@@ -13,7 +13,8 @@ async function requestOwnerState(method, state) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || "Unable to sync right now.");
+    const code = payload.code || `SYNC_HTTP_${response.status || 0}`;
+    throw new Error(`${code}: ${payload.error || "Unable to sync right now."}`);
   }
 
   return payload.state ?? null;
@@ -26,4 +27,3 @@ export async function fetchOwnerState() {
 export async function saveOwnerState(state) {
   return requestOwnerState("POST", state);
 }
-

@@ -13,13 +13,20 @@ function json(statusCode, body) {
 }
 
 function isAuthorized(event) {
-  return event.headers["x-owner-password"] === OWNER_PASSWORD;
+  const suppliedPassword =
+    event.headers?.["x-owner-password"] ??
+    event.headers?.["X-Owner-Password"] ??
+    event.headers?.["x-owner-password".toLowerCase()] ??
+    null;
+
+  return suppliedPassword === OWNER_PASSWORD;
 }
 
 export async function handler(event) {
   if (!isAuthorized(event)) {
     return json(401, {
       success: false,
+      code: "SYNC_AUTH_401",
       error: "Unauthorized",
     });
   }
@@ -40,6 +47,7 @@ export async function handler(event) {
       if (!parsed.state || typeof parsed.state !== "object") {
         return json(400, {
           success: false,
+          code: "SYNC_BAD_PAYLOAD",
           error: "State payload is required.",
         });
       }
@@ -57,11 +65,13 @@ export async function handler(event) {
 
     return json(405, {
       success: false,
+      code: "SYNC_METHOD_405",
       error: "Method not allowed.",
     });
   } catch (error) {
     return json(500, {
       success: false,
+      code: "SYNC_SERVER_500",
       error: error instanceof Error ? error.message : "Sync failed.",
     });
   }
