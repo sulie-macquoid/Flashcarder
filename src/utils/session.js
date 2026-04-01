@@ -4,7 +4,7 @@ import {
 } from "./constants";
 import { clamp, shuffleArray } from "./helpers";
 
-function createSnapshot(session) {
+function createReviewSnapshot(session) {
   return {
     queue: [...session.queue],
     completedCardIds: [...session.completedCardIds],
@@ -87,7 +87,7 @@ export function answerLearnCard(session, result) {
     currentCardId: nextQueue[0] ?? null,
     revealed: false,
     stats: nextStats,
-    history: [...session.history, createSnapshot(session)].slice(-MAX_UNDO_HISTORY),
+    history: [...session.history, createReviewSnapshot(session)].slice(-MAX_UNDO_HISTORY),
     updatedAt: new Date().toISOString(),
   };
 
@@ -162,4 +162,119 @@ export function moveFlashcard(state, direction) {
     flipped: false,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function buildMultipleChoiceOptions(cards, currentCardId) {
+  const currentCard = cards.find((card) => card.id === currentCardId);
+  if (!currentCard) {
+    return [];
+  }
+
+  const distractors = shuffleArray(
+    cards
+      .filter((card) => card.id !== currentCardId && card.back !== currentCard.back)
+      .map((card) => card.back),
+  ).slice(0, 3);
+
+  return shuffleArray([currentCard.back, ...distractors]);
+}
+
+function createQuizSnapshot(session) {
+  return {
+    queue: [...session.queue],
+    completedCardIds: [...session.completedCardIds],
+    currentCardId: session.currentCardId,
+    options: [...session.options],
+    lastResult: session.lastResult,
+    stats: { ...session.stats },
+  };
+}
+
+export function createQuizSession(cards, options = {}) {
+  const orderedCards = shuffleArray(cards.map((card) => card.id));
+  const currentCardId = orderedCards[0] ?? null;
+
+  return {
+    setId: options.setId ?? null,
+    queue: orderedCards,
+    completedCardIds: [],
+    currentCardId,
+    options: buildMultipleChoiceOptions(cards, currentCardId),
+    lastResult: null,
+    stats: {
+      answered: 0,
+      correct: 0,
+      wrong: 0,
+    },
+    history: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function answerQuizQuestion(session, cards, selectedAnswer) {
+  if (!session.currentCardId) {
+    return session;
+  }
+
+  const activeCard = cards.find((card) => card.id === session.currentCardId);
+  if (!activeCard) {
+    return session;
+  }
+
+  const queue = [...session.queue];
+  const activeCardId = queue.shift();
+  const isCorrect = selectedAnswer === activeCard.back;
+  let nextQueue = queue;
+  let nextCompleted = [...session.completedCardIds];
+
+  if (isCorrect) {
+    nextCompleted.push(activeCardId);
+  } else {
+    nextQueue = insertWithinNextFewCards(queue, activeCardId);
+  }
+
+  const nextCurrentCardId = nextQueue[0] ?? null;
+
+  return {
+    ...session,
+    queue: nextQueue,
+    completedCardIds: nextCompleted,
+    currentCardId: nextCurrentCardId,
+    options: buildMultipleChoiceOptions(cards, nextCurrentCardId),
+    lastResult: isCorrect ? "correct" : "wrong",
+    stats: {
+      answered: session.stats.answered + 1,
+      correct: session.stats.correct + (isCorrect ? 1 : 0),
+      wrong: session.stats.wrong + (isCorrect ? 0 : 1),
+    },
+    history: [...session.history, createQuizSnapshot(session)].slice(-MAX_UNDO_HISTORY),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function undoQuizAnswer(session) {
+  const history = [...session.history];
+  const previous = history.pop();
+  if (!previous) {
+    return session;
+  }
+
+  return {
+    ...session,
+    ...previous,
+    history,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function getQuizCompletion(session, totalCards) {
+  if (!totalCards) {
+    return 0;
+  }
+
+  return (session.completedCardIds.length / totalCards) * 100;
+}
+
+export function isQuizComplete(session) {
+  return session.queue.length === 0;
 }

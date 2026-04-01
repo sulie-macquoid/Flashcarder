@@ -5,11 +5,8 @@ import {
   Maximize,
   Minimize,
   Pencil,
-  RefreshCcw,
   RotateCcw,
-  Shuffle,
-  StepBack,
-  StepForward,
+  RefreshCcw,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ProgressBar from "../components/ProgressBar";
@@ -18,11 +15,17 @@ import EmptyState from "../components/EmptyState";
 import CardEditor from "../components/CardEditor";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useAppStore } from "../store/useAppStore";
-import { getLearnCompletion, isLearnComplete } from "../utils/session";
+import {
+  getLearnCompletion,
+  getQuizCompletion,
+  isLearnComplete,
+  isQuizComplete,
+} from "../utils/session";
 import { generateId } from "../utils/helpers";
 
 function accuracy(stats) {
-  return stats.answered ? Math.round((stats.known / stats.answered) * 100) : 0;
+  const correct = stats.correct ?? stats.known ?? 0;
+  return stats.answered ? Math.round((correct / stats.answered) * 100) : 0;
 }
 
 export default function StudyPage() {
@@ -32,14 +35,14 @@ export default function StudyPage() {
   const sets = useAppStore((state) => state.sets);
   const progressByUser = useAppStore((state) => state.progressByUser);
   const hydrateStudyModes = useAppStore((state) => state.hydrateStudyModes);
-  const initFlashcardMode = useAppStore((state) => state.initFlashcardMode);
   const markSetStudied = useAppStore((state) => state.markSetStudied);
-  const flipFlashcard = useAppStore((state) => state.flipFlashcard);
-  const moveFlashcard = useAppStore((state) => state.moveFlashcard);
-  const toggleFlashcardShuffle = useAppStore((state) => state.toggleFlashcardShuffle);
+  const startFlashcardSession = useAppStore((state) => state.startFlashcardSession);
+  const resumeFlashcardSession = useAppStore((state) => state.resumeFlashcardSession);
+  const revealFlashcardAnswer = useAppStore((state) => state.revealFlashcardAnswer);
+  const answerFlashcardCard = useAppStore((state) => state.answerFlashcardCard);
+  const undoFlashcardAnswer = useAppStore((state) => state.undoFlashcardAnswer);
   const startLearnSession = useAppStore((state) => state.startLearnSession);
   const resumeLearnSession = useAppStore((state) => state.resumeLearnSession);
-  const revealLearn = useAppStore((state) => state.revealLearnAnswer);
   const answerLearn = useAppStore((state) => state.answerLearnCard);
   const undoLearn = useAppStore((state) => state.undoLearnAnswer);
   const resetCardProgress = useAppStore((state) => state.resetCardProgress);
@@ -54,8 +57,8 @@ export default function StudyPage() {
       progressByUser[currentUserId]?.setProgress?.[setId] ?? {
         completedCardIds: [],
         flaggedCardIds: [],
-        learnSession: null,
-        flashcardState: null,
+        reviewSession: null,
+        quizSession: null,
         stats: {
           totalKnown: 0,
           totalUnknown: 0,
@@ -64,9 +67,9 @@ export default function StudyPage() {
     [currentUserId, progressByUser, setId],
   );
 
-  const [mode, setMode] = useState("learn");
+  const [mode, setMode] = useState("flashcards");
   const [editOpen, setEditOpen] = useState(false);
-  const [infiniteMode, setInfiniteMode] = useState(progress.learnSession?.infiniteMode ?? false);
+  const [infiniteMode, setInfiniteMode] = useState(progress.reviewSession?.infiniteMode ?? false);
   const [editableCards, setEditableCards] = useState(studySet?.cards ?? []);
   const [isFocusMode, setIsFocusMode] = useState(false);
 
@@ -84,23 +87,24 @@ export default function StudyPage() {
     }
   }, [studySet]);
 
-  const flashcardState = progress.flashcardState;
-  const learnSession = progress.learnSession;
+  const flashcardSession = progress.reviewSession;
+  const quizSession = progress.quizSession;
 
   const flashcardCard = useMemo(() => {
-    if (!studySet || !flashcardState) {
+    if (!studySet || !flashcardSession?.currentCardId) {
       return null;
     }
-    const cardId = flashcardState.order[flashcardState.index];
-    return studySet.cards.find((card) => card.id === cardId) ?? null;
-  }, [flashcardState, studySet]);
+    return (
+      studySet.cards.find((card) => card.id === flashcardSession.currentCardId) ?? null
+    );
+  }, [flashcardSession, studySet]);
 
   const learnCard = useMemo(() => {
-    if (!studySet || !learnSession?.currentCardId) {
+    if (!studySet || !quizSession?.currentCardId) {
       return null;
     }
-    return studySet.cards.find((card) => card.id === learnSession.currentCardId) ?? null;
-  }, [learnSession, studySet]);
+    return studySet.cards.find((card) => card.id === quizSession.currentCardId) ?? null;
+  }, [quizSession, studySet]);
 
   function toggleFocusMode() {
     setIsFocusMode((current) => !current);
@@ -110,25 +114,19 @@ export default function StudyPage() {
     {
       " ": () => {
         if (mode === "flashcards") {
-          flipFlashcard(setId);
-        } else if (mode === "learn" && learnSession) {
-          if (!learnSession.revealed) {
-            revealLearn(setId);
+          if (flashcardSession && !flashcardSession.revealed) {
+            revealFlashcardAnswer(setId);
           }
         }
       },
       ArrowLeft: () => {
-        if (mode === "flashcards") {
-          moveFlashcard(setId, -1);
-        } else if (mode === "learn" && learnSession?.revealed) {
-          answerLearn(setId, "dontKnow");
+        if (mode === "flashcards" && flashcardSession?.revealed) {
+          answerFlashcardCard(setId, "dontKnow");
         }
       },
       ArrowRight: () => {
-        if (mode === "flashcards") {
-          moveFlashcard(setId, 1);
-        } else if (mode === "learn" && learnSession?.revealed) {
-          answerLearn(setId, "know");
+        if (mode === "flashcards" && flashcardSession?.revealed) {
+          answerFlashcardCard(setId, "know");
         }
       },
       f: () => {
@@ -176,7 +174,12 @@ export default function StudyPage() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => setMode("learn")}
+              onClick={() => {
+                setMode("learn");
+                if (!quizSession) {
+                  startLearnSession(setId);
+                }
+              }}
               className={`rounded-full px-5 py-3 font-medium ${
                 mode === "learn" ? "bg-[var(--secondary)] text-white" : "border border-[var(--border)]"
               }`}
@@ -187,8 +190,8 @@ export default function StudyPage() {
               type="button"
               onClick={() => {
                 setMode("flashcards");
-                if (!flashcardState) {
-                  initFlashcardMode(setId);
+                if (!flashcardSession) {
+                  startFlashcardSession(setId, { infiniteMode });
                 }
               }}
               className={`rounded-full px-5 py-3 font-medium ${
@@ -221,28 +224,43 @@ export default function StudyPage() {
         <section className={`space-y-5 ${isFocusMode ? "mx-auto w-full max-w-5xl" : ""}`}>
           {mode === "flashcards" ? (
             <div className="glass-panel rounded-[2rem] p-5">
-              {flashcardCard && flashcardState ? (
+              {flashcardCard && flashcardSession ? (
                 <>
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm text-[var(--muted)]">
-                        Card {flashcardState.index + 1} of {flashcardState.order.length}
+                        {flashcardSession.completedCardIds.length} known,{" "}
+                        {flashcardSession.queue.length} still in this review cycle
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleFlashcardShuffle(setId)}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
-                    >
-                      <Shuffle size={16} />
-                      {flashcardState.shuffle ? "Unshuffle" : "Shuffle"}
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => resumeFlashcardSession(setId, infiniteMode)}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
+                      >
+                        <RefreshCcw size={16} />
+                        Keep current session
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm("Restart this flashcard review from a fresh shuffle?")) {
+                            startFlashcardSession(setId, { infiniteMode });
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
+                      >
+                        <RotateCcw size={16} />
+                        Restart
+                      </button>
+                    </div>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => flipFlashcard(setId)}
-                    className={`relative block w-full rounded-[2.2rem] bg-transparent text-left ${flashcardState.flipped ? "is-flipped" : ""} card-flip ${isFocusMode ? "min-h-[34rem]" : "min-h-[24rem]"}`}
+                    onClick={() => revealFlashcardAnswer(setId)}
+                    className={`relative block w-full rounded-[2.2rem] bg-transparent text-left ${flashcardSession.revealed ? "is-flipped" : ""} card-flip ${isFocusMode ? "min-h-[34rem]" : "min-h-[24rem]"}`}
                   >
                     <div className="card-face absolute inset-0 rounded-[2.2rem] bg-[var(--primary)] p-8 text-white">
                       <p className="text-sm uppercase tracking-[0.25em] text-white/70">
@@ -273,39 +291,50 @@ export default function StudyPage() {
                   </button>
 
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => moveFlashcard(setId, -1)}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-3 font-medium"
-                    >
-                      <StepBack size={16} />
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => flipFlashcard(setId)}
-                      className="rounded-full bg-[var(--secondary)] px-5 py-3 font-semibold text-white"
-                    >
-                      Flip card
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveFlashcard(setId, 1)}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-3 font-medium"
-                    >
-                      Next
-                      <StepForward size={16} />
-                    </button>
+                    {!flashcardSession.revealed ? (
+                      <button
+                        type="button"
+                        onClick={() => revealFlashcardAnswer(setId)}
+                        className="rounded-full bg-[var(--secondary)] px-6 py-4 text-lg font-semibold text-white"
+                      >
+                        Show answer
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => answerFlashcardCard(setId, "dontKnow")}
+                          className="rounded-full bg-red-600 px-6 py-4 text-lg font-semibold text-white"
+                        >
+                          I Don&apos;t Know
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => answerFlashcardCard(setId, "know")}
+                          className="rounded-full bg-[var(--success)] px-6 py-4 text-lg font-semibold text-white"
+                        >
+                          I Know
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => undoFlashcardAnswer(setId)}
+                          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-4 font-medium"
+                        >
+                          <RotateCcw size={16} />
+                          Undo last answer
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (
                 <EmptyState
-                  title="No flashcards loaded yet"
-                  description="Start flashcard mode to initialize the card order."
+                  title="Start flashcard review"
+                  description="Flip a card, then rate yourself with I Know or I Don't Know. Missed cards will come back soon."
                   action={
                     <button
                       type="button"
-                      onClick={() => initFlashcardMode(setId)}
+                      onClick={() => startFlashcardSession(setId, { infiniteMode })}
                       className="rounded-full bg-[var(--primary)] px-5 py-3 font-semibold text-white"
                     >
                       Start flashcards
@@ -316,31 +345,17 @@ export default function StudyPage() {
             </div>
           ) : (
             <div className="glass-panel rounded-[2rem] p-5">
-              {!learnSession ? (
+              {!quizSession ? (
                 <div className="space-y-5">
                   <div>
-                    <h3 className="text-2xl font-semibold">Start adaptive learn mode</h3>
+                    <h3 className="text-2xl font-semibold">Start learn quiz mode</h3>
                     <p className="mt-3 text-[var(--muted)]">
-                      Cards you know leave the queue. Cards you miss are reinserted
-                      a few cards later for quick reinforcement.
+                      Answer multiple-choice questions built from the other flashcards in this set. Wrong answers repeat later.
                     </p>
                   </div>
-                  <label className="flex items-center justify-between rounded-2xl border border-[var(--border)] px-4 py-4">
-                    <div>
-                      <p className="font-medium">Infinite mode</p>
-                      <p className="text-sm text-[var(--muted)]">
-                        Keep cards cycling instead of fully disappearing.
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={infiniteMode}
-                      onChange={(event) => setInfiniteMode(event.target.checked)}
-                    />
-                  </label>
                   <button
                     type="button"
-                    onClick={() => startLearnSession(setId, { infiniteMode })}
+                    onClick={() => startLearnSession(setId)}
                     className="rounded-full bg-[var(--secondary)] px-6 py-4 text-lg font-semibold text-white"
                   >
                     Start learn session
@@ -352,14 +367,13 @@ export default function StudyPage() {
                     <div>
                       <h3 className="text-2xl font-semibold">Learn mode</h3>
                       <p className="mt-2 text-[var(--muted)]">
-                        Resume picks up right where you stopped. Shortcuts: Space to
-                        reveal, Left for Don&apos;t Know, Right for Know.
+                        Quiz yourself with multiple choice. Wrong answers come back a few cards later.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-3">
                       <button
                         type="button"
-                        onClick={() => resumeLearnSession(setId, infiniteMode)}
+                        onClick={() => resumeLearnSession(setId)}
                         className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
                       >
                         <RefreshCcw size={16} />
@@ -369,7 +383,7 @@ export default function StudyPage() {
                         type="button"
                         onClick={() => {
                           if (window.confirm("Start over from a freshly shuffled queue?")) {
-                            startLearnSession(setId, { infiniteMode });
+                            startLearnSession(setId);
                           }
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm"
@@ -381,7 +395,7 @@ export default function StudyPage() {
                   </div>
 
                   <ProgressBar
-                    value={getLearnCompletion(learnSession, studySet.cards.length)}
+                    value={getQuizCompletion(quizSession, studySet.cards.length)}
                     label="Session completion"
                   />
 
@@ -390,11 +404,14 @@ export default function StudyPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm uppercase tracking-[0.2em] text-[var(--muted)]">
-                            {learnSession.revealed ? "Answer" : "Prompt"}
+                            Prompt
                           </p>
                           <h4 className="mt-4 text-3xl font-semibold leading-tight">
-                            {learnSession.revealed ? learnCard.back : learnCard.front}
+                            {learnCard.front}
                           </h4>
+                          <p className="mt-3 text-sm text-[var(--muted)]">
+                            Choose the matching answer.
+                          </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -434,52 +451,52 @@ export default function StudyPage() {
                         />
                       ) : null}
 
-                      <div className="mt-8 flex flex-wrap gap-3">
-                        {!learnSession.revealed ? (
+                      <div className="mt-8 grid gap-3 md:grid-cols-2">
+                        {quizSession.options.map((option) => (
                           <button
+                            key={option}
                             type="button"
-                            onClick={() => revealLearn(setId)}
-                            className="rounded-full bg-[var(--secondary)] px-6 py-4 text-lg font-semibold text-white"
+                            onClick={() => answerLearn(setId, option)}
+                            className="rounded-[1.4rem] border border-[var(--border)] bg-white/70 px-5 py-4 text-left font-medium transition hover:border-[var(--secondary)] hover:bg-white dark:bg-slate-950/30"
                           >
-                            Show answer
+                            {option}
                           </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => answerLearn(setId, "dontKnow")}
-                              className="rounded-full bg-red-600 px-6 py-4 text-lg font-semibold text-white"
-                            >
-                              I Don&apos;t Know
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => answerLearn(setId, "know")}
-                              className="rounded-full bg-[var(--success)] px-6 py-4 text-lg font-semibold text-white"
-                            >
-                              I Know
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => undoLearn(setId)}
-                              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-4 font-medium"
-                            >
-                              <RotateCcw size={16} />
-                              Undo last answer
-                            </button>
-                          </>
-                        )}
+                        ))}
+                      </div>
+
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => undoLearn(setId)}
+                          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-4 font-medium"
+                        >
+                          <RotateCcw size={16} />
+                          Undo last answer
+                        </button>
+                        {quizSession.lastResult ? (
+                          <div
+                            className={`rounded-full px-4 py-3 text-sm font-semibold ${
+                              quizSession.lastResult === "correct"
+                                ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-100"
+                                : "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-100"
+                            }`}
+                          >
+                            {quizSession.lastResult === "correct"
+                              ? "Correct"
+                              : "Wrong answer. That card will repeat soon."}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                  ) : isLearnComplete(learnSession) ? (
+                  ) : isQuizComplete(quizSession) ? (
                     <EmptyState
                       title="Session complete"
-                      description="Every card was marked as known. You can restart, switch to infinite mode, or head back to the dashboard."
+                      description="You answered every card correctly enough to finish the learn quiz."
                       action={
                         <div className="flex flex-wrap justify-center gap-3">
                           <button
                             type="button"
-                            onClick={() => startLearnSession(setId, { infiniteMode: false })}
+                            onClick={() => startLearnSession(setId)}
                             className="rounded-full bg-[var(--secondary)] px-5 py-3 font-semibold text-white"
                           >
                             Study again
@@ -515,7 +532,11 @@ export default function StudyPage() {
               <div className="soft-panel rounded-2xl p-4">
                 <p className="text-sm text-[var(--muted)]">Accuracy</p>
                 <p className="mt-1 text-2xl font-semibold">
-                  {accuracy(learnSession?.stats ?? { answered: 0, known: 0 })}%
+                  {accuracy(
+                    mode === "learn"
+                      ? quizSession?.stats ?? { answered: 0, correct: 0 }
+                      : flashcardSession?.stats ?? { answered: 0, known: 0 },
+                  )}%
                 </p>
               </div>
               <div className="soft-panel rounded-2xl p-4">

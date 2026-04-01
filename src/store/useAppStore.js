@@ -6,7 +6,17 @@ import {
   saveCloudState,
 } from "../services/cloudSync";
 import { loadState, saveState } from "../services/storage";
-import { createFlashcardState, createLearnSession, answerLearnCard, revealLearnAnswer, undoLearnAnswer, moveFlashcard, toggleFlashcardShuffle } from "../utils/session";
+import {
+  answerLearnCard,
+  answerQuizQuestion,
+  createLearnSession,
+  createQuizSession,
+  getQuizCompletion,
+  isQuizComplete,
+  revealLearnAnswer,
+  undoLearnAnswer,
+  undoQuizAnswer,
+} from "../utils/session";
 import { generateId, normalizeTags, sortByRecentStudy, sortByUpdatedAt } from "../utils/helpers";
 
 const initialState = loadState();
@@ -27,8 +37,8 @@ function getSetProgress(state, userId, setId) {
     userProgress.setProgress[setId] ?? {
       completedCardIds: [],
       flaggedCardIds: [],
-      learnSession: null,
-      flashcardState: null,
+      reviewSession: null,
+      quizSession: null,
       stats: {
         totalKnown: 0,
         totalUnknown: 0,
@@ -230,21 +240,37 @@ export const useAppStore = create((set, get) => ({
               flaggedCardIds: current.flaggedCardIds.filter((cardId) =>
                 cards.some((card) => card.id === cardId),
               ),
-              learnSession: current.learnSession
+              reviewSession: current.reviewSession
                 ? {
-                    ...current.learnSession,
-                    queue: current.learnSession.queue.filter((cardId) =>
+                    ...current.reviewSession,
+                    queue: current.reviewSession.queue.filter((cardId) =>
                       cards.some((card) => card.id === cardId),
                     ),
-                    completedCardIds:
-                      current.learnSession.completedCardIds.filter((cardId) =>
+                    completedCardIds: current.reviewSession.completedCardIds.filter((cardId) =>
                         cards.some((card) => card.id === cardId),
                       ),
                     currentCardId: cards.some(
-                      (card) => card.id === current.learnSession.currentCardId,
+                      (card) => card.id === current.reviewSession.currentCardId,
                     )
-                      ? current.learnSession.currentCardId
-                      : current.learnSession.queue[0] ?? null,
+                      ? current.reviewSession.currentCardId
+                      : current.reviewSession.queue[0] ?? null,
+                  }
+                : null,
+              quizSession: current.quizSession
+                ? {
+                    ...current.quizSession,
+                    queue: current.quizSession.queue.filter((cardId) =>
+                      cards.some((card) => card.id === cardId),
+                    ),
+                    completedCardIds: current.quizSession.completedCardIds.filter((cardId) =>
+                      cards.some((card) => card.id === cardId),
+                    ),
+                    currentCardId: cards.some(
+                      (card) => card.id === current.quizSession.currentCardId,
+                    )
+                      ? current.quizSession.currentCardId
+                      : current.quizSession.queue[0] ?? null,
+                    options: current.quizSession.options.filter(Boolean),
                   }
                 : null,
             }))
@@ -302,18 +328,30 @@ export const useAppStore = create((set, get) => ({
           ...current,
           completedCardIds: current.completedCardIds.filter((id) => id !== cardId),
           flaggedCardIds: current.flaggedCardIds,
-          learnSession: current.learnSession
+          reviewSession: current.reviewSession
             ? {
-                ...current.learnSession,
-                completedCardIds: current.learnSession.completedCardIds.filter(
+                ...current.reviewSession,
+                completedCardIds: current.reviewSession.completedCardIds.filter(
                   (id) => id !== cardId,
                 ),
-                queue: current.learnSession.queue.includes(cardId)
-                  ? current.learnSession.queue
-                  : [...current.learnSession.queue, cardId],
-                currentCardId: current.learnSession.currentCardId ?? cardId,
+                queue: current.reviewSession.queue.includes(cardId)
+                  ? current.reviewSession.queue
+                  : [...current.reviewSession.queue, cardId],
+                currentCardId: current.reviewSession.currentCardId ?? cardId,
               }
-            : current.learnSession,
+            : current.reviewSession,
+          quizSession: current.quizSession
+            ? {
+                ...current.quizSession,
+                completedCardIds: current.quizSession.completedCardIds.filter(
+                  (id) => id !== cardId,
+                ),
+                queue: current.quizSession.queue.includes(cardId)
+                  ? current.quizSession.queue
+                  : [...current.quizSession.queue, cardId],
+                currentCardId: current.quizSession.currentCardId ?? cardId,
+              }
+            : current.quizSession,
         })),
       };
     }),
@@ -324,8 +362,8 @@ export const useAppStore = create((set, get) => ({
         progressByUser: withSetProgress(state, userId, setId, () => ({
           completedCardIds: [],
           flaggedCardIds: [],
-          learnSession: null,
-          flashcardState: null,
+          reviewSession: null,
+          quizSession: null,
           stats: {
             totalKnown: 0,
             totalUnknown: 0,
@@ -362,7 +400,7 @@ export const useAppStore = create((set, get) => ({
         }),
       };
     }),
-  startLearnSession: (setId, options = {}) =>
+  startFlashcardSession: (setId, options = {}) =>
     set((state) => {
       const userId = state.currentUserId;
       const studySet = state.sets.find((item) => item.id === setId);
@@ -373,57 +411,57 @@ export const useAppStore = create((set, get) => ({
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          learnSession: createLearnSession(studySet.cards, {
+          reviewSession: createLearnSession(studySet.cards, {
             setId,
             infiniteMode: options.infiniteMode,
           }),
         })),
       };
     }),
-  resumeLearnSession: (setId, infiniteMode) =>
+  resumeFlashcardSession: (setId, infiniteMode) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          learnSession: current.learnSession
+          reviewSession: current.reviewSession
             ? {
-                ...current.learnSession,
+                ...current.reviewSession,
                 infiniteMode:
-                  infiniteMode ?? current.learnSession.infiniteMode ?? false,
+                  infiniteMode ?? current.reviewSession.infiniteMode ?? false,
               }
-            : current.learnSession,
+            : current.reviewSession,
         })),
       };
     }),
-  revealLearnAnswer: (setId) =>
+  revealFlashcardAnswer: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          learnSession: current.learnSession
-            ? revealLearnAnswer(current.learnSession)
-            : current.learnSession,
+          reviewSession: current.reviewSession
+            ? revealLearnAnswer(current.reviewSession)
+            : current.reviewSession,
         })),
       };
     }),
-  answerLearnCard: (setId, result) =>
+  answerFlashcardCard: (setId, result) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => {
-          if (!current.learnSession) {
+          if (!current.reviewSession) {
             return current;
           }
 
-          const nextSession = answerLearnCard(current.learnSession, result);
+          const nextSession = answerLearnCard(current.reviewSession, result);
           return {
             ...current,
             completedCardIds: nextSession.infiniteMode
               ? current.completedCardIds
               : nextSession.completedCardIds,
-            learnSession: nextSession,
+            reviewSession: nextSession,
             stats: {
               totalKnown: current.stats.totalKnown + (result === "know" ? 1 : 0),
               totalUnknown:
@@ -433,25 +471,25 @@ export const useAppStore = create((set, get) => ({
         }),
       };
     }),
-  undoLearnAnswer: (setId) =>
+  undoFlashcardAnswer: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => {
-          if (!current.learnSession) {
+          if (!current.reviewSession) {
             return current;
           }
 
-          const restored = undoLearnAnswer(current.learnSession);
+          const restored = undoLearnAnswer(current.reviewSession);
           return {
             ...current,
             completedCardIds: restored.completedCardIds,
-            learnSession: restored,
+            reviewSession: restored,
           };
         }),
       };
     }),
-  initFlashcardMode: (setId) =>
+  startLearnSession: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
       const studySet = state.sets.find((item) => item.id === setId);
@@ -462,7 +500,7 @@ export const useAppStore = create((set, get) => ({
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          flashcardState: createFlashcardState(studySet.cards),
+          quizSession: createQuizSession(studySet.cards, { setId }),
         })),
       };
     }),
@@ -477,43 +515,61 @@ export const useAppStore = create((set, get) => ({
           : item,
       ),
     })),
-  flipFlashcard: (setId) =>
+  resumeLearnSession: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          flashcardState: current.flashcardState
-            ? {
-                ...current.flashcardState,
-                flipped: !current.flashcardState.flipped,
-                updatedAt: new Date().toISOString(),
-              }
-            : current.flashcardState,
+          quizSession: current.quizSession ?? null,
         })),
       };
     }),
-  moveFlashcard: (setId, direction) =>
+  answerLearnCard: (setId, selectedAnswer) =>
     set((state) => {
       const userId = state.currentUserId;
+      const studySet = state.sets.find((item) => item.id === setId);
+      if (!studySet) {
+        return state;
+      }
+
       return {
-        progressByUser: withSetProgress(state, userId, setId, (current) => ({
-          ...current,
-          flashcardState: current.flashcardState
-            ? moveFlashcard(current.flashcardState, direction)
-            : current.flashcardState,
-        })),
+        progressByUser: withSetProgress(state, userId, setId, (current) => {
+          if (!current.quizSession) {
+            return current;
+          }
+
+          const currentCard = studySet.cards.find(
+            (card) => card.id === current.quizSession.currentCardId,
+          );
+          const isCorrect = selectedAnswer === currentCard?.back;
+          const nextSession = answerQuizQuestion(
+            current.quizSession,
+            studySet.cards,
+            selectedAnswer,
+          );
+
+          return {
+            ...current,
+            completedCardIds: nextSession.completedCardIds,
+            quizSession: nextSession,
+            stats: {
+              totalKnown: current.stats.totalKnown + (isCorrect ? 1 : 0),
+              totalUnknown: current.stats.totalUnknown + (isCorrect ? 0 : 1),
+            },
+          };
+        }),
       };
     }),
-  toggleFlashcardShuffle: (setId) =>
+  undoLearnAnswer: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
       return {
         progressByUser: withSetProgress(state, userId, setId, (current) => ({
           ...current,
-          flashcardState: current.flashcardState
-            ? toggleFlashcardShuffle(current.flashcardState)
-            : current.flashcardState,
+          quizSession: current.quizSession
+            ? undoQuizAnswer(current.quizSession)
+            : current.quizSession,
         })),
       };
     }),
@@ -526,8 +582,8 @@ export const useAppStore = create((set, get) => ({
       return;
     }
 
-    if (!progress.flashcardState) {
-      get().initFlashcardMode(setId);
+    if (!progress.reviewSession) {
+      get().startFlashcardSession(setId);
     }
   },
   getCurrentUser: () => {
