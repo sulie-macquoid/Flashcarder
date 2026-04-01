@@ -28,6 +28,42 @@ function accuracy(stats) {
   return stats.answered ? Math.round((correct / stats.answered) * 100) : 0;
 }
 
+function normalizeStudyProgress(rawProgress) {
+  return {
+    completedCardIds: Array.isArray(rawProgress?.completedCardIds)
+      ? rawProgress.completedCardIds
+      : [],
+    flaggedCardIds: Array.isArray(rawProgress?.flaggedCardIds)
+      ? rawProgress.flaggedCardIds
+      : [],
+    reviewSession:
+      rawProgress?.reviewSession && typeof rawProgress.reviewSession === "object"
+        ? rawProgress.reviewSession
+        : rawProgress?.learnSession && typeof rawProgress.learnSession === "object"
+          ? rawProgress.learnSession
+          : null,
+    quizSession:
+      rawProgress?.quizSession && typeof rawProgress.quizSession === "object"
+        ? {
+            ...rawProgress.quizSession,
+            queue: Array.isArray(rawProgress.quizSession.queue)
+              ? rawProgress.quizSession.queue
+              : [],
+            completedCardIds: Array.isArray(rawProgress.quizSession.completedCardIds)
+              ? rawProgress.quizSession.completedCardIds
+              : [],
+            options: Array.isArray(rawProgress.quizSession.options)
+              ? rawProgress.quizSession.options
+              : [],
+          }
+        : null,
+    stats: {
+      totalKnown: rawProgress?.stats?.totalKnown ?? 0,
+      totalUnknown: rawProgress?.stats?.totalUnknown ?? 0,
+    },
+  };
+}
+
 export default function StudyPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
@@ -54,17 +90,7 @@ export default function StudyPage() {
     [setId, sets],
   );
   const progress = useMemo(
-    () =>
-      progressByUser[currentUserId]?.setProgress?.[setId] ?? {
-        completedCardIds: [],
-        flaggedCardIds: [],
-        reviewSession: null,
-        quizSession: null,
-        stats: {
-          totalKnown: 0,
-          totalUnknown: 0,
-        },
-      },
+    () => normalizeStudyProgress(progressByUser[currentUserId]?.setProgress?.[setId]),
     [currentUserId, progressByUser, setId],
   );
 
