@@ -90,6 +90,8 @@ export default function StudyPage() {
 
   const flashcardSession = progress.reviewSession;
   const quizSession = progress.quizSession;
+  const hasValidQuizSession =
+    Boolean(quizSession?.currentCardId) && Array.isArray(quizSession?.options);
 
   const flashcardCard = useMemo(() => {
     if (!studySet || !flashcardSession?.currentCardId) {
@@ -177,7 +179,7 @@ export default function StudyPage() {
               type="button"
               onClick={() => {
                 setMode("learn");
-                if (!quizSession) {
+                if (!hasValidQuizSession) {
                   startLearnSession(setId);
                 }
               }}
@@ -353,7 +355,7 @@ export default function StudyPage() {
             </div>
           ) : (
             <div className="glass-panel rounded-[2rem] p-5">
-              {!quizSession ? (
+              {!hasValidQuizSession ? (
                 <div className="space-y-5">
                   <div>
                     <h3 className="text-2xl font-semibold">Start learn quiz mode</h3>
@@ -460,7 +462,7 @@ export default function StudyPage() {
                       ) : null}
 
                       <div className="mt-8 grid gap-3 md:grid-cols-2">
-                        {quizSession.options.map((option) => (
+                        {(quizSession.options ?? []).map((option) => (
                           <button
                             key={option}
                             type="button"
