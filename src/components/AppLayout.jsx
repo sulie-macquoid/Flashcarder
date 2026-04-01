@@ -28,9 +28,9 @@ export default function AppLayout() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.25em] text-[var(--muted)]">
-                    FlashMind
+                    Sullys Grand Flashcards
                   </p>
-                  <h1 className="text-2xl font-semibold">Study with momentum</h1>
+                  <h1 className="text-2xl font-semibold">Study with confidence</h1>
                 </div>
               </Link>
             </div>

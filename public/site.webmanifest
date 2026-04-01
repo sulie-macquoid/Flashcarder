@@ -1,6 +1,6 @@
 {
-  "name": "FlashMind",
-  "short_name": "FlashMind",
+  "name": "Sullys Grand Flashcards",
+  "short_name": "Sullys Flashcards",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4efe4",

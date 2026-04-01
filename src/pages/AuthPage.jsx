@@ -45,7 +45,7 @@ export default function AuthPage() {
             <BookOpen size={30} />
           </div>
           <p className="mt-6 text-sm uppercase tracking-[0.3em] text-[var(--muted)]">
-            FlashMind
+            Sullys Grand Flashcards
           </p>
           <h1 className="mt-4 max-w-xl text-4xl font-semibold leading-tight sm:text-5xl">
             A focused flashcard workspace built for fast, repeatable learning.

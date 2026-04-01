@@ -61,7 +61,7 @@ export function loadState() {
             id: "storage-warning",
             type: "warning",
             message:
-              "Stored data looked corrupted, so FlashMind started with a clean local profile.",
+              "Stored data looked corrupted, so Sullys Grand Flashcards started with a clean local profile.",
           },
         ],
       },
