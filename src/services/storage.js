@@ -1,7 +1,8 @@
-import { STORAGE_KEY, THEME_KEY } from "../utils/constants";
+import { SESSION_KEY, STORAGE_KEY, THEME_KEY } from "../utils/constants";
 
 const EMPTY_STATE = {
   currentUserId: null,
+  sessionToken: null,
   users: [],
   folders: [],
   sets: [],
@@ -19,6 +20,10 @@ function normalizeState(parsed) {
 
   return {
     currentUserId: parsed.currentUserId ?? null,
+    sessionToken:
+      typeof parsed.sessionToken === "string" && parsed.sessionToken
+        ? parsed.sessionToken
+        : localStorage.getItem(SESSION_KEY) ?? null,
     users: Array.isArray(parsed.users) ? parsed.users : [],
     folders: Array.isArray(parsed.folders) ? parsed.folders : [],
     sets: Array.isArray(parsed.sets) ? parsed.sets : [],
@@ -72,6 +77,7 @@ export function loadState() {
 export function saveState(state) {
   const nextState = {
     currentUserId: state.currentUserId,
+    sessionToken: state.sessionToken,
     users: state.users,
     folders: state.folders,
     sets: state.sets,
@@ -84,4 +90,9 @@ export function saveState(state) {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
   localStorage.setItem(THEME_KEY, state.ui.theme);
+  if (state.sessionToken) {
+    localStorage.setItem(SESSION_KEY, state.sessionToken);
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
 }

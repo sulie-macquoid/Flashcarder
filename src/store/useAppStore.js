@@ -1,10 +1,16 @@
 import { create } from "zustand";
 import { createStarterContent } from "../data/demoData";
+import {
+  authenticateCloudAccount,
+  fetchCloudState,
+  saveCloudState,
+} from "../services/cloudSync";
 import { loadState, saveState } from "../services/storage";
 import { createFlashcardState, createLearnSession, answerLearnCard, revealLearnAnswer, undoLearnAnswer, moveFlashcard, toggleFlashcardShuffle } from "../utils/session";
 import { generateId, normalizeTags, sortByUpdatedAt } from "../utils/helpers";
 
 const initialState = loadState();
+let remoteSaveTimer = null;
 
 function getUserProgress(state, userId) {
   return (
@@ -60,46 +66,56 @@ function createUser(name, email, password) {
 
 export const useAppStore = create((set, get) => ({
   ...initialState,
-  signUp: ({ name, email, password }) => {
-    const existing = get().users.find(
-      (user) => user.email === email.trim().toLowerCase(),
-    );
-
-    if (existing) {
-      throw new Error("An account with that email already exists.");
-    }
-
-    const user = createUser(name, email, password);
-    const starter = createStarterContent(user.id);
+  signUp: async ({ name, email, password }) => {
+    const result = await authenticateCloudAccount("signup", {
+      name,
+      email,
+      password,
+    });
 
     set((state) => ({
       ...state,
-      currentUserId: user.id,
-      users: [...state.users, user],
-      folders: [...state.folders, ...starter.folders],
-      sets: [...state.sets, ...starter.sets],
-      progressByUser: {
-        ...state.progressByUser,
-        [user.id]: {
-          setProgress: {},
-          dailyGoal: 20,
-        },
-      },
+      ...result.state,
+      sessionToken: result.sessionToken,
     }));
   },
-  logIn: ({ email, password }) => {
-    const user = get().users.find(
-      (item) =>
-        item.email === email.trim().toLowerCase() && item.password === password,
-    );
+  logIn: async ({ email, password }) => {
+    const result = await authenticateCloudAccount("login", {
+      email,
+      password,
+    });
 
-    if (!user) {
-      throw new Error("Email or password did not match.");
+    set((state) => ({
+      ...state,
+      ...result.state,
+      sessionToken: result.sessionToken,
+    }));
+  },
+  restoreCloudSession: async () => {
+    const token = get().sessionToken;
+    if (!token) {
+      return;
     }
 
-    set({ currentUserId: user.id });
+    try {
+      const result = await fetchCloudState(token);
+      set((state) => ({
+        ...state,
+        ...result.state,
+      }));
+    } catch {
+      set((state) => ({
+        ...state,
+        sessionToken: null,
+        currentUserId: null,
+      }));
+    }
   },
-  logOut: () => set({ currentUserId: null }),
+  logOut: () =>
+    set({
+      currentUserId: null,
+      sessionToken: null,
+    }),
   dismissNotice: (noticeId) =>
     set((state) => ({
       ui: {
@@ -528,6 +544,44 @@ export const useAppStore = create((set, get) => ({
 useAppStore.subscribe((state) => {
   saveState(state);
   document.documentElement.classList.toggle("dark", state.ui.theme === "dark");
+
+  if (!state.sessionToken || !state.currentUserId) {
+    return;
+  }
+
+  if (remoteSaveTimer) {
+    clearTimeout(remoteSaveTimer);
+  }
+
+  remoteSaveTimer = setTimeout(() => {
+    const currentState = useAppStore.getState();
+    const currentUser = currentState.users.find(
+      (user) => user.id === currentState.currentUserId,
+    );
+
+    if (!currentState.sessionToken || !currentUser) {
+      return;
+    }
+
+    saveCloudState(currentState.sessionToken, {
+      user: {
+        name: currentUser.name,
+      },
+      folders: currentState.folders.filter(
+        (folder) => folder.userId === currentState.currentUserId,
+      ),
+      sets: currentState.sets.filter(
+        (setItem) => setItem.userId === currentState.currentUserId,
+      ),
+      progress:
+        currentState.progressByUser[currentState.currentUserId] ?? {
+          setProgress: {},
+          dailyGoal: 20,
+        },
+    }).catch(() => {
+      // Local state is still preserved even if a cloud save fails.
+    });
+  }, 450);
 });
 
 document.documentElement.classList.toggle(

@@ -55,8 +55,8 @@ export default function AuthPage() {
             adaptive learn sessions where missed cards resurface a few turns later.
           </p>
           <p className="mt-4 max-w-2xl text-sm text-[var(--muted)]">
-            This version uses local-only accounts stored in your browser, so the
-            same email on another device will not automatically sync the same data.
+            Your account now syncs through the deployed app, so logging in on your
+            phone or laptop should bring the same flashcards and progress with you.
           </p>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {[

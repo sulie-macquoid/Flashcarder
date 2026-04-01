@@ -73,7 +73,7 @@ export default function AppLayout() {
               </span>
               <span className="inline-flex items-center gap-2">
                 <FolderOpen size={16} />
-                Sets, folders, progress, and resumes all save locally
+                Sets, folders, progress, and resumes now sync to your account
               </span>
             </div>
             <span>Netlify-ready frontend with optional functions support</span>
