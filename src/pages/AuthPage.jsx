@@ -54,6 +54,10 @@ export default function AuthPage() {
             Create folders, organize sets, study with classic flashcards, and run
             adaptive learn sessions where missed cards resurface a few turns later.
           </p>
+          <p className="mt-4 max-w-2xl text-sm text-[var(--muted)]">
+            This version uses local-only accounts stored in your browser, so the
+            same email on another device will not automatically sync the same data.
+          </p>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {[
               "Resume sessions exactly where you stopped",

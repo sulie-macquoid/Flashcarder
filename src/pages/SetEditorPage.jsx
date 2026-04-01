@@ -5,7 +5,7 @@ import CardEditor from "../components/CardEditor";
 import EmptyState from "../components/EmptyState";
 import ImportExportPanel from "../components/ImportExportPanel";
 import { useAppStore } from "../store/useAppStore";
-import { generateId } from "../utils/helpers";
+import { generateId, sortByUpdatedAt } from "../utils/helpers";
 
 function createBlankCard() {
   return {
@@ -19,9 +19,21 @@ function createBlankCard() {
 export default function SetEditorPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
-  const existingSet = useAppStore((state) => (setId ? state.getSetById(setId) : null));
-  const folders = useAppStore((state) => state.getFoldersForCurrentUser());
+  const currentUserId = useAppStore((state) => state.currentUserId);
+  const allSets = useAppStore((state) => state.sets);
+  const allFolders = useAppStore((state) => state.folders);
   const saveSet = useAppStore((state) => state.saveSet);
+  const existingSet = useMemo(
+    () => (setId ? allSets.find((item) => item.id === setId) ?? null : null),
+    [allSets, setId],
+  );
+  const folders = useMemo(
+    () =>
+      sortByUpdatedAt(
+        allFolders.filter((folder) => folder.userId === currentUserId),
+      ),
+    [allFolders, currentUserId],
+  );
 
   const [title, setTitle] = useState(existingSet?.title ?? "");
   const [description, setDescription] = useState(existingSet?.description ?? "");

@@ -6,6 +6,7 @@ import SetCard from "../components/SetCard";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
 import { useAppStore } from "../store/useAppStore";
+import { sortByUpdatedAt } from "../utils/helpers";
 
 function completionForSet(setItem, progress) {
   if (!setItem.cards.length) {
@@ -16,19 +17,36 @@ function completionForSet(setItem, progress) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const folders = useAppStore((state) => state.getFoldersForCurrentUser());
-  const sets = useAppStore((state) => state.getSetsForCurrentUser());
+  const currentUserId = useAppStore((state) => state.currentUserId);
+  const users = useAppStore((state) => state.users);
+  const allFolders = useAppStore((state) => state.folders);
+  const allSets = useAppStore((state) => state.sets);
+  const progressByUser = useAppStore((state) => state.progressByUser);
   const duplicateSet = useAppStore((state) => state.duplicateSet);
   const deleteSet = useAppStore((state) => state.deleteSet);
   const resetSetProgress = useAppStore((state) => state.resetSetProgress);
   const resetAllProgress = useAppStore((state) => state.resetAllProgress);
   const createFolder = useAppStore((state) => state.createFolder);
-  const currentUser = useAppStore((state) => state.getCurrentUser());
-  const dailyGoal = useAppStore(
-    (state) =>
-      state.progressByUser[state.currentUserId]?.dailyGoal ?? 20,
-  );
   const setDailyGoal = useAppStore((state) => state.setDailyGoal);
+
+  const folders = useMemo(
+    () =>
+      sortByUpdatedAt(
+        allFolders.filter((folder) => folder.userId === currentUserId),
+      ),
+    [allFolders, currentUserId],
+  );
+  const sets = useMemo(
+    () =>
+      sortByUpdatedAt(allSets.filter((setItem) => setItem.userId === currentUserId)),
+    [allSets, currentUserId],
+  );
+  const currentUser = useMemo(
+    () => users.find((user) => user.id === currentUserId) ?? null,
+    [currentUserId, users],
+  );
+  const userProgress = progressByUser[currentUserId] ?? { setProgress: {}, dailyGoal: 20 };
+  const dailyGoal = userProgress.dailyGoal ?? 20;
 
   const [activeFolderId, setActiveFolderId] = useState("all");
   const [query, setQuery] = useState("");
@@ -63,10 +81,12 @@ export default function DashboardPage() {
   const completedToday = useMemo(
     () =>
       sets.reduce((total, setItem) => {
-        const progress = useAppStore.getState().getProgressForSet(setItem.id);
+        const progress = userProgress.setProgress[setItem.id] ?? {
+          stats: { totalKnown: 0 },
+        };
         return total + (progress.stats.totalKnown ?? 0);
       }, 0),
-    [sets],
+    [sets, userProgress.setProgress],
   );
 
   return (
@@ -164,7 +184,13 @@ export default function DashboardPage() {
           <div className="mt-5 space-y-4">
             {filteredSets.length ? (
               filteredSets.map((setItem) => {
-                const progress = useAppStore.getState().getProgressForSet(setItem.id);
+                const progress = userProgress.setProgress[setItem.id] ?? {
+                  completedCardIds: [],
+                  stats: {
+                    totalKnown: 0,
+                    totalUnknown: 0,
+                  },
+                };
                 const folder = folders.find((item) => item.id === setItem.folderId);
 
                 return (

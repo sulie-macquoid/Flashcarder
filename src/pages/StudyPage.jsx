@@ -17,6 +17,7 @@ import CardEditor from "../components/CardEditor";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useAppStore } from "../store/useAppStore";
 import { getLearnCompletion, isLearnComplete } from "../utils/session";
+import { generateId } from "../utils/helpers";
 
 function accuracy(stats) {
   return stats.answered ? Math.round((stats.known / stats.answered) * 100) : 0;
@@ -25,8 +26,9 @@ function accuracy(stats) {
 export default function StudyPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
-  const studySet = useAppStore((state) => state.getSetById(setId));
-  const progress = useAppStore((state) => state.getProgressForSet(setId));
+  const currentUserId = useAppStore((state) => state.currentUserId);
+  const sets = useAppStore((state) => state.sets);
+  const progressByUser = useAppStore((state) => state.progressByUser);
   const hydrateStudyModes = useAppStore((state) => state.hydrateStudyModes);
   const initFlashcardMode = useAppStore((state) => state.initFlashcardMode);
   const flipFlashcard = useAppStore((state) => state.flipFlashcard);
@@ -40,6 +42,24 @@ export default function StudyPage() {
   const resetCardProgress = useAppStore((state) => state.resetCardProgress);
   const toggleFlagCard = useAppStore((state) => state.toggleFlagCard);
   const saveSet = useAppStore((state) => state.saveSet);
+  const studySet = useMemo(
+    () => sets.find((item) => item.id === setId) ?? null,
+    [setId, sets],
+  );
+  const progress = useMemo(
+    () =>
+      progressByUser[currentUserId]?.setProgress?.[setId] ?? {
+        completedCardIds: [],
+        flaggedCardIds: [],
+        learnSession: null,
+        flashcardState: null,
+        stats: {
+          totalKnown: 0,
+          totalUnknown: 0,
+        },
+      },
+    [currentUserId, progressByUser, setId],
+  );
 
   const [mode, setMode] = useState("learn");
   const [editOpen, setEditOpen] = useState(false);
@@ -514,7 +534,7 @@ export default function StudyPage() {
             onAddCard={() =>
               setEditableCards((current) => [
                 ...current,
-                { id: `card-temp-${Date.now()}`, front: "", back: "", imageUrl: "" },
+                { id: generateId("card"), front: "", back: "", imageUrl: "" },
               ])
             }
             onRemoveCard={(cardId) =>

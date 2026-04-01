@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { BookOpen, FolderOpen, LogOut, Plus, Target } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
@@ -5,10 +6,15 @@ import ThemeToggle from "./ThemeToggle";
 
 export default function AppLayout() {
   const navigate = useNavigate();
-  const currentUser = useAppStore((state) => state.getCurrentUser());
+  const currentUserId = useAppStore((state) => state.currentUserId);
+  const users = useAppStore((state) => state.users);
   const logOut = useAppStore((state) => state.logOut);
   const notices = useAppStore((state) => state.ui.notices);
   const dismissNotice = useAppStore((state) => state.dismissNotice);
+  const currentUser = useMemo(
+    () => users.find((user) => user.id === currentUserId) ?? null,
+    [currentUserId, users],
+  );
 
   return (
     <div className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
