@@ -29,6 +29,37 @@ function accuracy(stats) {
 }
 
 function normalizeStudyProgress(rawProgress) {
+  const rawReviewSession =
+    rawProgress?.reviewSession && typeof rawProgress.reviewSession === "object"
+      ? rawProgress.reviewSession
+      : rawProgress?.learnSession && typeof rawProgress.learnSession === "object"
+        ? rawProgress.learnSession
+        : null;
+  const reviewQueue = Array.isArray(rawReviewSession?.queue)
+    ? rawReviewSession.queue.filter(Boolean)
+    : [];
+  const reviewCompletedCardIds = Array.isArray(rawReviewSession?.completedCardIds)
+    ? rawReviewSession.completedCardIds.filter(Boolean)
+    : [];
+  const reviewCurrentCardId =
+    typeof rawReviewSession?.currentCardId === "string" && rawReviewSession.currentCardId
+      ? rawReviewSession.currentCardId
+      : reviewQueue[0] ?? null;
+  const rawQuizSession =
+    rawProgress?.quizSession && typeof rawProgress.quizSession === "object"
+      ? rawProgress.quizSession
+      : null;
+  const quizQueue = Array.isArray(rawQuizSession?.queue)
+    ? rawQuizSession.queue.filter(Boolean)
+    : [];
+  const quizCompletedCardIds = Array.isArray(rawQuizSession?.completedCardIds)
+    ? rawQuizSession.completedCardIds.filter(Boolean)
+    : [];
+  const quizCurrentCardId =
+    typeof rawQuizSession?.currentCardId === "string" && rawQuizSession.currentCardId
+      ? rawQuizSession.currentCardId
+      : quizQueue[0] ?? null;
+
   return {
     completedCardIds: Array.isArray(rawProgress?.completedCardIds)
       ? rawProgress.completedCardIds
@@ -36,27 +67,47 @@ function normalizeStudyProgress(rawProgress) {
     flaggedCardIds: Array.isArray(rawProgress?.flaggedCardIds)
       ? rawProgress.flaggedCardIds
       : [],
-    reviewSession:
-      rawProgress?.reviewSession && typeof rawProgress.reviewSession === "object"
-        ? rawProgress.reviewSession
-        : rawProgress?.learnSession && typeof rawProgress.learnSession === "object"
-          ? rawProgress.learnSession
-          : null,
-    quizSession:
-      rawProgress?.quizSession && typeof rawProgress.quizSession === "object"
-        ? {
-            ...rawProgress.quizSession,
-            queue: Array.isArray(rawProgress.quizSession.queue)
-              ? rawProgress.quizSession.queue
-              : [],
-            completedCardIds: Array.isArray(rawProgress.quizSession.completedCardIds)
-              ? rawProgress.quizSession.completedCardIds
-              : [],
-            options: Array.isArray(rawProgress.quizSession.options)
-              ? rawProgress.quizSession.options
-              : [],
-          }
-        : null,
+    reviewSession: rawReviewSession
+      ? {
+          ...rawReviewSession,
+          originalOrder: Array.isArray(rawReviewSession.originalOrder)
+            ? rawReviewSession.originalOrder.filter(Boolean)
+            : [...reviewQueue],
+          queue: reviewQueue,
+          completedCardIds: reviewCompletedCardIds,
+          currentCardId: reviewCurrentCardId,
+          revealed: Boolean(rawReviewSession.revealed),
+          shuffled: Boolean(rawReviewSession.shuffled),
+          infiniteMode: Boolean(rawReviewSession.infiniteMode),
+          stats: {
+            answered: rawReviewSession.stats?.answered ?? 0,
+            known: rawReviewSession.stats?.known ?? 0,
+            unknown: rawReviewSession.stats?.unknown ?? 0,
+          },
+          history: Array.isArray(rawReviewSession.history) ? rawReviewSession.history : [],
+        }
+      : null,
+    quizSession: rawQuizSession
+      ? {
+          ...rawQuizSession,
+          queue: quizQueue,
+          completedCardIds: quizCompletedCardIds,
+          currentCardId: quizCurrentCardId,
+          options: Array.isArray(rawQuizSession.options)
+            ? rawQuizSession.options.filter(Boolean)
+            : [],
+          lastResult:
+            rawQuizSession.lastResult === "correct" || rawQuizSession.lastResult === "wrong"
+              ? rawQuizSession.lastResult
+              : null,
+          stats: {
+            answered: rawQuizSession.stats?.answered ?? 0,
+            correct: rawQuizSession.stats?.correct ?? 0,
+            wrong: rawQuizSession.stats?.wrong ?? 0,
+          },
+          history: Array.isArray(rawQuizSession.history) ? rawQuizSession.history : [],
+        }
+      : null,
     stats: {
       totalKnown: rawProgress?.stats?.totalKnown ?? 0,
       totalUnknown: rawProgress?.stats?.totalUnknown ?? 0,
@@ -116,8 +167,15 @@ export default function StudyPage() {
 
   const flashcardSession = progress.reviewSession;
   const quizSession = progress.quizSession;
+  const hasValidFlashcardSession =
+    Boolean(flashcardSession?.currentCardId) &&
+    Array.isArray(flashcardSession?.queue) &&
+    Array.isArray(flashcardSession?.completedCardIds);
   const hasValidQuizSession =
-    Boolean(quizSession?.currentCardId) && Array.isArray(quizSession?.options);
+    Boolean(quizSession?.currentCardId) &&
+    Array.isArray(quizSession?.options) &&
+    Array.isArray(quizSession?.queue) &&
+    Array.isArray(quizSession?.completedCardIds);
 
   useEffect(() => {
     if (mode === "learn" && !hasValidQuizSession && studySet) {
@@ -259,7 +317,7 @@ export default function StudyPage() {
         <section className={`space-y-5 ${isFocusMode ? "mx-auto w-full max-w-5xl" : ""}`}>
           {mode === "flashcards" ? (
             <div className="glass-panel rounded-[2rem] p-5">
-              {flashcardCard && flashcardSession ? (
+              {flashcardCard && hasValidFlashcardSession ? (
                 <>
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>

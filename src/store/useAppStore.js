@@ -1,10 +1,5 @@
 import { create } from "zustand";
 import { createStarterContent } from "../data/demoData";
-import {
-  authenticateCloudAccount,
-  fetchCloudState,
-  saveCloudState,
-} from "../services/cloudSync";
 import { loadState, saveState } from "../services/storage";
 import {
   answerLearnCard,
@@ -21,7 +16,78 @@ import {
 import { generateId, normalizeTags, sortByRecentStudy, sortByUpdatedAt } from "../utils/helpers";
 
 const initialState = loadState();
-let remoteSaveTimer = null;
+const SINGLE_USER_PASSWORD = "SullyIsBigBoss";
+const SINGLE_USER_ID = "user-sully-owner";
+
+function sanitizeReviewSession(rawSession) {
+  if (!rawSession || typeof rawSession !== "object") {
+    return null;
+  }
+
+  const queue = Array.isArray(rawSession.queue) ? rawSession.queue.filter(Boolean) : [];
+  const completedCardIds = Array.isArray(rawSession.completedCardIds)
+    ? rawSession.completedCardIds.filter(Boolean)
+    : [];
+  const originalOrder = Array.isArray(rawSession.originalOrder)
+    ? rawSession.originalOrder.filter(Boolean)
+    : [...queue];
+  const currentCardId =
+    typeof rawSession.currentCardId === "string" && rawSession.currentCardId
+      ? rawSession.currentCardId
+      : queue[0] ?? null;
+
+  return {
+    setId: rawSession.setId ?? null,
+    infiniteMode: Boolean(rawSession.infiniteMode),
+    originalOrder,
+    shuffled: Boolean(rawSession.shuffled),
+    queue,
+    completedCardIds,
+    currentCardId,
+    revealed: Boolean(rawSession.revealed),
+    stats: {
+      answered: rawSession.stats?.answered ?? 0,
+      known: rawSession.stats?.known ?? 0,
+      unknown: rawSession.stats?.unknown ?? 0,
+    },
+    history: Array.isArray(rawSession.history) ? rawSession.history : [],
+    updatedAt: rawSession.updatedAt ?? null,
+  };
+}
+
+function sanitizeQuizSession(rawSession) {
+  if (!rawSession || typeof rawSession !== "object") {
+    return null;
+  }
+
+  const queue = Array.isArray(rawSession.queue) ? rawSession.queue.filter(Boolean) : [];
+  const completedCardIds = Array.isArray(rawSession.completedCardIds)
+    ? rawSession.completedCardIds.filter(Boolean)
+    : [];
+  const currentCardId =
+    typeof rawSession.currentCardId === "string" && rawSession.currentCardId
+      ? rawSession.currentCardId
+      : queue[0] ?? null;
+
+  return {
+    setId: rawSession.setId ?? null,
+    queue,
+    completedCardIds,
+    currentCardId,
+    options: Array.isArray(rawSession.options) ? rawSession.options.filter(Boolean) : [],
+    lastResult:
+      rawSession.lastResult === "correct" || rawSession.lastResult === "wrong"
+        ? rawSession.lastResult
+        : null,
+    stats: {
+      answered: rawSession.stats?.answered ?? 0,
+      correct: rawSession.stats?.correct ?? 0,
+      wrong: rawSession.stats?.wrong ?? 0,
+    },
+    history: Array.isArray(rawSession.history) ? rawSession.history : [],
+    updatedAt: rawSession.updatedAt ?? null,
+  };
+}
 
 function getUserProgress(state, userId) {
   return (
@@ -45,18 +111,8 @@ function getSetProgress(state, userId, setId) {
     flaggedCardIds: Array.isArray(rawProgress.flaggedCardIds)
       ? rawProgress.flaggedCardIds
       : [],
-    reviewSession: legacyReviewSession,
-    quizSession:
-      rawProgress.quizSession &&
-      typeof rawProgress.quizSession === "object" &&
-      Array.isArray(rawProgress.quizSession.queue)
-        ? {
-            ...rawProgress.quizSession,
-            options: Array.isArray(rawProgress.quizSession.options)
-              ? rawProgress.quizSession.options
-              : [],
-          }
-        : null,
+    reviewSession: sanitizeReviewSession(legacyReviewSession),
+    quizSession: sanitizeQuizSession(rawProgress.quizSession),
     stats: {
       totalKnown: rawProgress.stats?.totalKnown ?? 0,
       totalUnknown: rawProgress.stats?.totalUnknown ?? 0,
@@ -81,67 +137,53 @@ function withSetProgress(state, userId, setId, updater) {
   };
 }
 
-function createUser(name, email, password) {
+function createUser(name, email = "owner@sullys-grand-flashcards.local") {
   return {
-    id: generateId("user"),
+    id: SINGLE_USER_ID,
     name: name.trim(),
     email: email.trim().toLowerCase(),
-    password,
     createdAt: new Date().toISOString(),
   };
 }
 
 export const useAppStore = create((set, get) => ({
   ...initialState,
-  signUp: async ({ name, email, password }) => {
-    const result = await authenticateCloudAccount("signup", {
-      name,
-      email,
-      password,
-    });
+  unlockApp: ({ password }) => {
+    if (password !== SINGLE_USER_PASSWORD) {
+      throw new Error("That password is not correct.");
+    }
 
-    set((state) => ({
-      ...state,
-      ...result.state,
-      sessionToken: result.sessionToken,
-    }));
-  },
-  logIn: async ({ email, password }) => {
-    const result = await authenticateCloudAccount("login", {
-      email,
-      password,
-    });
+    const state = get();
+    const existingUser = state.users.find((user) => user.id === SINGLE_USER_ID);
 
-    set((state) => ({
-      ...state,
-      ...result.state,
-      sessionToken: result.sessionToken,
-    }));
-  },
-  restoreCloudSession: async () => {
-    const token = get().sessionToken;
-    if (!token) {
+    if (existingUser) {
+      set({
+        currentUserId: SINGLE_USER_ID,
+      });
       return;
     }
 
-    try {
-      const result = await fetchCloudState(token);
-      set((state) => ({
-        ...state,
-        ...result.state,
-      }));
-    } catch {
-      set((state) => ({
-        ...state,
-        sessionToken: null,
-        currentUserId: null,
-      }));
-    }
+    const user = createUser("Sully");
+    const starter = createStarterContent(user.id);
+
+    set((current) => ({
+      ...current,
+      currentUserId: user.id,
+      users: [user, ...current.users.filter((item) => item.id !== user.id)],
+      folders: [...current.folders, ...starter.folders],
+      sets: [...current.sets, ...starter.sets],
+      progressByUser: {
+        ...current.progressByUser,
+        [user.id]: {
+          setProgress: {},
+          dailyGoal: 20,
+        },
+      },
+    }));
   },
   logOut: () =>
     set({
       currentUserId: null,
-      sessionToken: null,
     }),
   dismissNotice: (noticeId) =>
     set((state) => ({
@@ -642,44 +684,6 @@ export const useAppStore = create((set, get) => ({
 useAppStore.subscribe((state) => {
   saveState(state);
   document.documentElement.classList.toggle("dark", state.ui.theme === "dark");
-
-  if (!state.sessionToken || !state.currentUserId) {
-    return;
-  }
-
-  if (remoteSaveTimer) {
-    clearTimeout(remoteSaveTimer);
-  }
-
-  remoteSaveTimer = setTimeout(() => {
-    const currentState = useAppStore.getState();
-    const currentUser = currentState.users.find(
-      (user) => user.id === currentState.currentUserId,
-    );
-
-    if (!currentState.sessionToken || !currentUser) {
-      return;
-    }
-
-    saveCloudState(currentState.sessionToken, {
-      user: {
-        name: currentUser.name,
-      },
-      folders: currentState.folders.filter(
-        (folder) => folder.userId === currentState.currentUserId,
-      ),
-      sets: currentState.sets.filter(
-        (setItem) => setItem.userId === currentState.currentUserId,
-      ),
-      progress:
-        currentState.progressByUser[currentState.currentUserId] ?? {
-          setProgress: {},
-          dailyGoal: 20,
-        },
-    }).catch(() => {
-      // Local state is still preserved even if a cloud save fails.
-    });
-  }, 450);
 });
 
 document.documentElement.classList.toggle(

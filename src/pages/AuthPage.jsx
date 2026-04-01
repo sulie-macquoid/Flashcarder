@@ -1,20 +1,16 @@
 import { useState } from "react";
-import { BookOpen, KeyRound, UserRound } from "lucide-react";
+import { BookOpen, KeyRound } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
 
 const defaultForm = {
-  name: "",
-  email: "",
   password: "",
 };
 
 export default function AuthPage() {
-  const [mode, setMode] = useState("signup");
   const [form, setForm] = useState(defaultForm);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const signUp = useAppStore((state) => state.signUp);
-  const logIn = useAppStore((state) => state.logIn);
+  const unlockApp = useAppStore((state) => state.unlockApp);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -22,18 +18,11 @@ export default function AuthPage() {
     setIsSubmitting(true);
 
     try {
-      if (!form.email.trim() || !form.password.trim()) {
-        throw new Error("Email and password are required.");
+      if (!form.password.trim()) {
+        throw new Error("Password is required.");
       }
 
-      if (mode === "signup") {
-        if (!form.name.trim()) {
-          throw new Error("Name is required to create an account.");
-        }
-        await signUp(form);
-      } else {
-        await logIn(form);
-      }
+      unlockApp(form);
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -59,8 +48,8 @@ export default function AuthPage() {
             adaptive learn sessions where missed cards resurface a few turns later.
           </p>
           <p className="mt-4 max-w-2xl text-sm text-[var(--muted)]">
-            Your account now syncs through the deployed app, so logging in on your
-            phone or laptop should bring the same flashcards and progress with you.
+            This is now a single-owner app lock. Enter your password once on a device
+            and it will stay remembered until you log out.
           </p>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {[
@@ -76,56 +65,15 @@ export default function AuthPage() {
         </section>
 
         <section className="glass-panel rounded-[2.5rem] p-8 sm:p-10">
-          <div className="flex gap-2 rounded-full bg-slate-200/40 p-1 dark:bg-slate-900/30">
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`flex-1 rounded-full px-4 py-3 text-sm font-medium ${
-                mode === "signup" ? "bg-[var(--primary)] text-white" : ""
-              }`}
-            >
-              Sign up
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("login")}
-              className={`flex-1 rounded-full px-4 py-3 text-sm font-medium ${
-                mode === "login" ? "bg-[var(--primary)] text-white" : ""
-              }`}
-            >
-              Log in
-            </button>
-          </div>
+          <p className="text-sm uppercase tracking-[0.25em] text-[var(--muted)]">
+            Private access
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold">Unlock your flashcards</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Use your owner password to open the app on this device.
+          </p>
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-            {mode === "signup" ? (
-              <label className="block space-y-2">
-                <span className="inline-flex items-center gap-2 text-sm font-medium">
-                  <UserRound size={16} />
-                  Name
-                </span>
-                <input
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  className="w-full rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 outline-none dark:bg-slate-950/30"
-                  placeholder="Avery"
-                />
-              </label>
-            ) : null}
-            <label className="block space-y-2">
-              <span className="text-sm font-medium">Email</span>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, email: event.target.value }))
-                }
-                className="w-full rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 outline-none dark:bg-slate-950/30"
-                placeholder="you@example.com"
-              />
-            </label>
             <label className="block space-y-2">
               <span className="inline-flex items-center gap-2 text-sm font-medium">
                 <KeyRound size={16} />
@@ -150,11 +98,7 @@ export default function AuthPage() {
               disabled={isSubmitting}
               className="w-full rounded-full bg-[var(--secondary)] px-5 py-4 text-base font-semibold text-white"
             >
-              {isSubmitting
-                ? "Working..."
-                : mode === "signup"
-                  ? "Create account"
-                  : "Log in"}
+              {isSubmitting ? "Unlocking..." : "Unlock app"}
             </button>
           </form>
         </section>
