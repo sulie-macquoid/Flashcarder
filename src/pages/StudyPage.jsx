@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Flag,
@@ -28,7 +28,6 @@ function accuracy(stats) {
 export default function StudyPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
-  const studyShellRef = useRef(null);
   const currentUserId = useAppStore((state) => state.currentUserId);
   const sets = useAppStore((state) => state.sets);
   const progressByUser = useAppStore((state) => state.progressByUser);
@@ -68,7 +67,7 @@ export default function StudyPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [infiniteMode, setInfiniteMode] = useState(progress.learnSession?.infiniteMode ?? false);
   const [editableCards, setEditableCards] = useState(studySet?.cards ?? []);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   useEffect(() => {
     if (!studySet) {
@@ -82,15 +81,6 @@ export default function StudyPage() {
       setEditableCards(studySet.cards);
     }
   }, [studySet]);
-
-  useEffect(() => {
-    function onFullscreenChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    }
-
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
 
   const flashcardState = progress.flashcardState;
   const learnSession = progress.learnSession;
@@ -110,19 +100,8 @@ export default function StudyPage() {
     return studySet.cards.find((card) => card.id === learnSession.currentCardId) ?? null;
   }, [learnSession, studySet]);
 
-  async function toggleFullscreen() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-        return;
-      }
-
-      if (studyShellRef.current?.requestFullscreen) {
-        await studyShellRef.current.requestFullscreen();
-      }
-    } catch {
-      // If fullscreen is blocked by the browser, the study page still works normally.
-    }
+  function toggleFocusMode() {
+    setIsFocusMode((current) => !current);
   }
 
   useKeyboardShortcuts(
@@ -151,10 +130,10 @@ export default function StudyPage() {
         }
       },
       f: () => {
-        toggleFullscreen();
+        toggleFocusMode();
       },
       F: () => {
-        toggleFullscreen();
+        toggleFocusMode();
       },
     },
     Boolean(studySet),
@@ -179,10 +158,7 @@ export default function StudyPage() {
   }
 
   return (
-    <div
-      ref={studyShellRef}
-      className={`space-y-5 ${isFullscreen ? "min-h-screen overflow-y-auto bg-[var(--bg)] p-4 sm:p-6" : ""}`}
-    >
+    <div className={`space-y-5 ${isFocusMode ? "mx-auto max-w-6xl" : ""}`}>
       <div className="glass-panel rounded-[2rem] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -229,18 +205,18 @@ export default function StudyPage() {
             </button>
             <button
               type="button"
-              onClick={toggleFullscreen}
+              onClick={toggleFocusMode}
               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-3 font-medium"
             >
-              {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              {isFocusMode ? <Minimize size={16} /> : <Maximize size={16} />}
+              {isFocusMode ? "Exit focus mode" : "Focus mode"}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <section className="space-y-5">
+      <div className={`grid gap-5 ${isFocusMode ? "mx-auto max-w-5xl" : "xl:grid-cols-[minmax(0,1fr)_21rem]"}`}>
+        <section className={`space-y-5 ${isFocusMode ? "mx-auto w-full max-w-5xl" : ""}`}>
           {mode === "flashcards" ? (
             <div className="glass-panel rounded-[2rem] p-5">
               {flashcardCard && flashcardState ? (
@@ -264,7 +240,7 @@ export default function StudyPage() {
                   <button
                     type="button"
                     onClick={() => flipFlashcard(setId)}
-                    className={`relative block min-h-[24rem] w-full rounded-[2.2rem] bg-transparent text-left ${flashcardState.flipped ? "is-flipped" : ""} card-flip`}
+                    className={`relative block w-full rounded-[2.2rem] bg-transparent text-left ${flashcardState.flipped ? "is-flipped" : ""} card-flip ${isFocusMode ? "min-h-[34rem]" : "min-h-[24rem]"}`}
                   >
                     <div className="card-face absolute inset-0 rounded-[2.2rem] bg-[var(--primary)] p-8 text-white">
                       <p className="text-sm uppercase tracking-[0.25em] text-white/70">
@@ -277,11 +253,11 @@ export default function StudyPage() {
                         <img
                           src={flashcardCard.imageUrl}
                           alt=""
-                          className="mt-6 max-h-56 rounded-2xl object-cover"
+                          className={`mt-6 rounded-2xl object-cover ${isFocusMode ? "max-h-72" : "max-h-56"}`}
                         />
                       ) : null}
                       <p className="absolute bottom-8 text-sm text-white/70">
-                        Press Space to flip, F for fullscreen
+                        Press Space to flip, F for focus mode
                       </p>
                     </div>
                     <div className="card-face back absolute inset-0 rounded-[2.2rem] bg-[var(--secondary)] p-8 text-white">
@@ -452,7 +428,7 @@ export default function StudyPage() {
                         <img
                           src={learnCard.imageUrl}
                           alt=""
-                          className="mt-6 max-h-72 rounded-[1.5rem] object-cover"
+                          className={`mt-6 rounded-[1.5rem] object-cover ${isFocusMode ? "max-h-[26rem]" : "max-h-72"}`}
                         />
                       ) : null}
 
@@ -523,7 +499,8 @@ export default function StudyPage() {
           )}
         </section>
 
-        <aside className="space-y-5">
+        {!isFocusMode ? (
+          <aside className="space-y-5">
           <div className="glass-panel rounded-[2rem] p-5">
             <h3 className="text-xl font-semibold">Session stats</h3>
             <div className="mt-5 grid gap-3">
@@ -557,7 +534,8 @@ export default function StudyPage() {
               <li>Reset actions never delete card content</li>
             </ul>
           </div>
-        </aside>
+          </aside>
+        ) : null}
       </div>
 
       <Modal
