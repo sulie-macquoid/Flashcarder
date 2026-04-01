@@ -234,12 +234,6 @@ export default function SetEditorPage() {
           <ImportExportPanel
             cards={cards}
             onImport={setCards}
-            enableUrlImport={!existingSet}
-            onImportedTitle={(importedTitle) => {
-              if (!title.trim()) {
-                setTitle(importedTitle);
-              }
-            }}
           />
         </aside>
       </div>
