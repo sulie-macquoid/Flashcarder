@@ -7,7 +7,7 @@ import {
 } from "../services/cloudSync";
 import { loadState, saveState } from "../services/storage";
 import { createFlashcardState, createLearnSession, answerLearnCard, revealLearnAnswer, undoLearnAnswer, moveFlashcard, toggleFlashcardShuffle } from "../utils/session";
-import { generateId, normalizeTags, sortByUpdatedAt } from "../utils/helpers";
+import { generateId, normalizeTags, sortByRecentStudy, sortByUpdatedAt } from "../utils/helpers";
 
 const initialState = loadState();
 let remoteSaveTimer = null;
@@ -210,6 +210,7 @@ export const useAppStore = create((set, get) => ({
         cards,
         createdAt: payload.createdAt || now,
         updatedAt: now,
+        lastStudiedAt: payload.lastStudiedAt ?? null,
       };
 
       const exists = state.sets.some((item) => item.id === normalizedSet.id);
@@ -465,6 +466,17 @@ export const useAppStore = create((set, get) => ({
         })),
       };
     }),
+  markSetStudied: (setId) =>
+    set((state) => ({
+      sets: state.sets.map((item) =>
+        item.id === setId
+          ? {
+              ...item,
+              lastStudiedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    })),
   flipFlashcard: (setId) =>
     set((state) => {
       const userId = state.currentUserId;
@@ -530,7 +542,7 @@ export const useAppStore = create((set, get) => ({
   },
   getSetsForCurrentUser: () => {
     const state = get();
-    return sortByUpdatedAt(
+    return sortByRecentStudy(
       state.sets.filter((item) => item.userId === state.currentUserId),
     );
   },

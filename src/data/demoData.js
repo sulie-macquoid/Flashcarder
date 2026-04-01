@@ -45,6 +45,7 @@ export function createStarterContent(userId) {
         ],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        lastStudiedAt: null,
       },
     ],
   };

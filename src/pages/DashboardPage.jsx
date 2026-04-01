@@ -6,7 +6,7 @@ import SetCard from "../components/SetCard";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
 import { useAppStore } from "../store/useAppStore";
-import { sortByUpdatedAt } from "../utils/helpers";
+import { sortByRecentStudy, sortByUpdatedAt } from "../utils/helpers";
 
 function completionForSet(setItem, progress) {
   if (!setItem.cards.length) {
@@ -37,8 +37,7 @@ export default function DashboardPage() {
     [allFolders, currentUserId],
   );
   const sets = useMemo(
-    () =>
-      sortByUpdatedAt(allSets.filter((setItem) => setItem.userId === currentUserId)),
+    () => sortByRecentStudy(allSets.filter((setItem) => setItem.userId === currentUserId)),
     [allSets, currentUserId],
   );
   const currentUser = useMemo(

@@ -49,3 +49,16 @@ export function sortByUpdatedAt(items) {
     (left, right) => new Date(right.updatedAt) - new Date(left.updatedAt),
   );
 }
+
+export function sortByRecentStudy(items) {
+  return [...items].sort((left, right) => {
+    const rightRecent = right.lastStudiedAt ? new Date(right.lastStudiedAt).getTime() : 0;
+    const leftRecent = left.lastStudiedAt ? new Date(left.lastStudiedAt).getTime() : 0;
+
+    if (rightRecent !== leftRecent) {
+      return rightRecent - leftRecent;
+    }
+
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
+}

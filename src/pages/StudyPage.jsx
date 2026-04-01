@@ -33,6 +33,7 @@ export default function StudyPage() {
   const progressByUser = useAppStore((state) => state.progressByUser);
   const hydrateStudyModes = useAppStore((state) => state.hydrateStudyModes);
   const initFlashcardMode = useAppStore((state) => state.initFlashcardMode);
+  const markSetStudied = useAppStore((state) => state.markSetStudied);
   const flipFlashcard = useAppStore((state) => state.flipFlashcard);
   const moveFlashcard = useAppStore((state) => state.moveFlashcard);
   const toggleFlashcardShuffle = useAppStore((state) => state.toggleFlashcardShuffle);
@@ -74,7 +75,8 @@ export default function StudyPage() {
       return;
     }
     hydrateStudyModes(studySet.id);
-  }, [hydrateStudyModes, studySet]);
+    markSetStudied(studySet.id);
+  }, [hydrateStudyModes, markSetStudied, studySet]);
 
   useEffect(() => {
     if (studySet) {
