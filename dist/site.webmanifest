@@ -1,0 +1,9 @@
+{
+  "name": "FlashMind",
+  "short_name": "FlashMind",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4efe4",
+  "theme_color": "#183153",
+  "icons": []
+}

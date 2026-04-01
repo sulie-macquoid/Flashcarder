@@ -1,0 +1,165 @@
+import {
+  LEARN_REINSERT_RANGE,
+  MAX_UNDO_HISTORY,
+} from "./constants";
+import { clamp, shuffleArray } from "./helpers";
+
+function createSnapshot(session) {
+  return {
+    queue: [...session.queue],
+    completedCardIds: [...session.completedCardIds],
+    currentCardId: session.currentCardId,
+    revealed: session.revealed,
+    stats: { ...session.stats },
+  };
+}
+
+function insertWithinNextFewCards(queue, cardId) {
+  const minOffset = LEARN_REINSERT_RANGE.min;
+  const maxOffset = Math.min(LEARN_REINSERT_RANGE.max, queue.length + 1);
+  const offset =
+    Math.floor(Math.random() * (maxOffset - minOffset + 1)) + minOffset;
+  const insertIndex = clamp(offset - 1, 0, queue.length);
+  const nextQueue = [...queue];
+  nextQueue.splice(insertIndex, 0, cardId);
+  return nextQueue;
+}
+
+export function createLearnSession(cards, options = {}) {
+  const orderedCards = shuffleArray(cards.map((card) => card.id));
+  const currentCardId = orderedCards[0] ?? null;
+
+  return {
+    setId: options.setId ?? null,
+    infiniteMode: Boolean(options.infiniteMode),
+    queue: orderedCards,
+    completedCardIds: [],
+    currentCardId,
+    revealed: false,
+    stats: {
+      answered: 0,
+      known: 0,
+      unknown: 0,
+    },
+    history: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function revealLearnAnswer(session) {
+  return {
+    ...session,
+    revealed: true,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function answerLearnCard(session, result) {
+  if (!session.currentCardId) {
+    return session;
+  }
+
+  const queue = [...session.queue];
+  const activeCardId = queue.shift();
+  let nextQueue = queue;
+  let nextCompleted = [...session.completedCardIds];
+  const nextStats = {
+    ...session.stats,
+    answered: session.stats.answered + 1,
+    known: session.stats.known + (result === "know" ? 1 : 0),
+    unknown: session.stats.unknown + (result === "dontKnow" ? 1 : 0),
+  };
+
+  if (result === "know") {
+    if (session.infiniteMode) {
+      nextQueue = insertWithinNextFewCards(queue, activeCardId);
+    } else {
+      nextCompleted.push(activeCardId);
+    }
+  } else {
+    nextQueue = insertWithinNextFewCards(queue, activeCardId);
+  }
+
+  const nextSession = {
+    ...session,
+    queue: nextQueue,
+    completedCardIds: nextCompleted,
+    currentCardId: nextQueue[0] ?? null,
+    revealed: false,
+    stats: nextStats,
+    history: [...session.history, createSnapshot(session)].slice(-MAX_UNDO_HISTORY),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return nextSession;
+}
+
+export function undoLearnAnswer(session) {
+  const history = [...session.history];
+  const previous = history.pop();
+  if (!previous) {
+    return session;
+  }
+
+  return {
+    ...session,
+    ...previous,
+    history,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function getLearnCompletion(session, totalCards) {
+  if (!totalCards) {
+    return 0;
+  }
+
+  if (session.infiniteMode) {
+    return session.stats.known
+      ? Math.min((session.stats.known / totalCards) * 100, 100)
+      : 0;
+  }
+
+  return (session.completedCardIds.length / totalCards) * 100;
+}
+
+export function isLearnComplete(session) {
+  return !session.infiniteMode && session.queue.length === 0;
+}
+
+export function createFlashcardState(cards) {
+  const order = cards.map((card) => card.id);
+
+  return {
+    order,
+    index: 0,
+    flipped: false,
+    shuffle: false,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function toggleFlashcardShuffle(state) {
+  const currentCardId = state.order[state.index] ?? null;
+  const order = state.shuffle ? [...state.order].sort() : shuffleArray(state.order);
+  const nextIndex = currentCardId ? Math.max(order.indexOf(currentCardId), 0) : 0;
+
+  return {
+    ...state,
+    order,
+    index: nextIndex,
+    flipped: false,
+    shuffle: !state.shuffle,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function moveFlashcard(state, direction) {
+  const nextIndex = clamp(state.index + direction, 0, state.order.length - 1);
+  return {
+    ...state,
+    index: nextIndex,
+    flipped: false,
+    updatedAt: new Date().toISOString(),
+  };
+}
