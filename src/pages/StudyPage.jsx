@@ -158,10 +158,11 @@ export default function StudyPage() {
   const resetCardProgress = useAppStore((state) => state.resetCardProgress);
   const toggleFlagCard = useAppStore((state) => state.toggleFlagCard);
   const saveSet = useAppStore((state) => state.saveSet);
-  const studySet = useMemo(
-    () => normalizeStudySet(sets.find((item) => item.id === setId) ?? null),
+  const rawStudySet = useMemo(
+    () => sets.find((item) => item.id === setId) ?? null,
     [setId, sets],
   );
+  const studySet = useMemo(() => normalizeStudySet(rawStudySet), [rawStudySet]);
   const progress = useMemo(
     () => normalizeStudyProgress(progressByUser[currentUserId]?.setProgress?.[setId]),
     [currentUserId, progressByUser, setId],
@@ -177,15 +178,15 @@ export default function StudyPage() {
     if (!studySet) {
       return;
     }
-    hydrateStudyModes(studySet.id);
-    markSetStudied(studySet.id);
-  }, [hydrateStudyModes, markSetStudied, studySet]);
+    hydrateStudyModes(setId);
+    markSetStudied(setId);
+  }, [hydrateStudyModes, markSetStudied, setId, studySet?.id]);
 
   useEffect(() => {
     if (studySet) {
       setEditableCards(studySet.cards);
     }
-  }, [studySet]);
+  }, [studySet?.id, studySet?.updatedAt]);
 
   const flashcardSession = progress.reviewSession;
   const quizSession = progress.quizSession;
