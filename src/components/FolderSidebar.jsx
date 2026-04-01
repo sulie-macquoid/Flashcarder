@@ -1,10 +1,11 @@
-import { FolderOpen, Plus } from "lucide-react";
+import { FolderOpen, Plus, Trash2 } from "lucide-react";
 
 export default function FolderSidebar({
   folders,
   activeFolderId,
   onSelectFolder,
   onCreateFolder,
+  onDeleteFolder,
 }) {
   return (
     <aside className="glass-panel rounded-[2rem] p-5">
@@ -51,22 +52,34 @@ export default function FolderSidebar({
         </button>
 
         {folders.map((folder) => (
-          <button
+          <div
             key={folder.id}
-            type="button"
-            onClick={() => onSelectFolder(folder.id)}
-            className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left ${
-              activeFolderId === folder.id
-                ? "bg-[var(--primary)] text-white"
-                : "soft-panel"
+            className={`flex items-center gap-2 rounded-2xl px-3 py-2 ${
+              activeFolderId === folder.id ? "bg-[var(--primary)] text-white" : "soft-panel"
             }`}
           >
-            <span className="inline-flex items-center gap-2">
-              <FolderOpen size={16} />
-              {folder.name}
-            </span>
-            <span className="text-xs opacity-75">Folder</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onSelectFolder(folder.id)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
+            >
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <FolderOpen size={16} />
+                <span className="truncate">{folder.name}</span>
+              </span>
+              <span className="text-xs opacity-75">Folder</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteFolder(folder)}
+              className={`rounded-full p-2 ${
+                activeFolderId === folder.id ? "hover:bg-white/15" : "hover:bg-black/5 dark:hover:bg-white/10"
+              }`}
+              aria-label={`Delete ${folder.name}`}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
         ))}
       </div>
     </aside>

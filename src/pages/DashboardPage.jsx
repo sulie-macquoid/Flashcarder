@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const resetSetProgress = useAppStore((state) => state.resetSetProgress);
   const resetAllProgress = useAppStore((state) => state.resetAllProgress);
   const createFolder = useAppStore((state) => state.createFolder);
+  const deleteFolder = useAppStore((state) => state.deleteFolder);
   const setDailyGoal = useAppStore((state) => state.setDailyGoal);
 
   const folders = useMemo(
@@ -95,6 +96,18 @@ export default function DashboardPage() {
         activeFolderId={activeFolderId}
         onSelectFolder={setActiveFolderId}
         onCreateFolder={() => setFolderModalOpen(true)}
+        onDeleteFolder={(folder) => {
+          if (
+            window.confirm(
+              `Delete folder "${folder.name}"? Sets inside it will stay saved and become ungrouped.`,
+            )
+          ) {
+            deleteFolder(folder.id);
+            if (activeFolderId === folder.id) {
+              setActiveFolderId("all");
+            }
+          }
+        }}
       />
 
       <section className="space-y-5">

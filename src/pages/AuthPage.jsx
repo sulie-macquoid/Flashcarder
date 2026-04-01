@@ -22,7 +22,7 @@ export default function AuthPage() {
         throw new Error("Password is required.");
       }
 
-      unlockApp(form);
+      await unlockApp(form);
     } catch (submitError) {
       setError(submitError.message);
     } finally {

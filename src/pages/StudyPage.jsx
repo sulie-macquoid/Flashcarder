@@ -115,6 +115,28 @@ function normalizeStudyProgress(rawProgress) {
   };
 }
 
+function normalizeStudySet(rawSet) {
+  if (!rawSet || typeof rawSet !== "object") {
+    return null;
+  }
+
+  return {
+    ...rawSet,
+    description: typeof rawSet.description === "string" ? rawSet.description : "",
+    tags: Array.isArray(rawSet.tags) ? rawSet.tags.filter(Boolean) : [],
+    cards: Array.isArray(rawSet.cards)
+      ? rawSet.cards
+          .map((card, index) => ({
+            id: typeof card?.id === "string" && card.id ? card.id : `legacy-card-${index}`,
+            front: typeof card?.front === "string" ? card.front : "",
+            back: typeof card?.back === "string" ? card.back : "",
+            imageUrl: typeof card?.imageUrl === "string" ? card.imageUrl : "",
+          }))
+          .filter((card) => card.front && card.back)
+      : [],
+  };
+}
+
 export default function StudyPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
@@ -137,7 +159,7 @@ export default function StudyPage() {
   const toggleFlagCard = useAppStore((state) => state.toggleFlagCard);
   const saveSet = useAppStore((state) => state.saveSet);
   const studySet = useMemo(
-    () => sets.find((item) => item.id === setId) ?? null,
+    () => normalizeStudySet(sets.find((item) => item.id === setId) ?? null),
     [setId, sets],
   );
   const progress = useMemo(

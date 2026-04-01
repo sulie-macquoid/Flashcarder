@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createStarterContent } from "../data/demoData";
 import { loadState, saveState } from "../services/storage";
+import { fetchOwnerState, saveOwnerState } from "../services/ownerSync";
 import {
   answerLearnCard,
   answerQuizQuestion,
@@ -18,6 +19,51 @@ import { generateId, normalizeTags, sortByRecentStudy, sortByUpdatedAt } from ".
 const initialState = loadState();
 const SINGLE_USER_PASSWORD = "SullyIsBigBoss";
 const SINGLE_USER_ID = "user-sully-owner";
+let remoteSaveTimer = null;
+
+function normalizeCard(card) {
+  return {
+    id: typeof card?.id === "string" && card.id ? card.id : generateId("card"),
+    front: typeof card?.front === "string" ? card.front.trim() : "",
+    back: typeof card?.back === "string" ? card.back.trim() : "",
+    imageUrl: typeof card?.imageUrl === "string" ? card.imageUrl.trim() : "",
+  };
+}
+
+function normalizeFolder(folder) {
+  const now = new Date().toISOString();
+
+  return {
+    id: typeof folder?.id === "string" && folder.id ? folder.id : generateId("folder"),
+    userId: SINGLE_USER_ID,
+    name: typeof folder?.name === "string" ? folder.name.trim() : "Untitled folder",
+    description: typeof folder?.description === "string" ? folder.description.trim() : "",
+    createdAt: folder?.createdAt ?? now,
+    updatedAt: folder?.updatedAt ?? folder?.createdAt ?? now,
+  };
+}
+
+function normalizeSetItem(setItem) {
+  const now = new Date().toISOString();
+  const cards = Array.isArray(setItem?.cards)
+    ? setItem.cards.map(normalizeCard).filter((card) => card.front && card.back)
+    : [];
+
+  return {
+    id: typeof setItem?.id === "string" && setItem.id ? setItem.id : generateId("set"),
+    userId: SINGLE_USER_ID,
+    folderId: typeof setItem?.folderId === "string" && setItem.folderId ? setItem.folderId : null,
+    title: typeof setItem?.title === "string" && setItem.title.trim()
+      ? setItem.title.trim()
+      : "Untitled set",
+    description: typeof setItem?.description === "string" ? setItem.description.trim() : "",
+    tags: Array.isArray(setItem?.tags) ? normalizeTags(setItem.tags) : [],
+    cards,
+    createdAt: setItem?.createdAt ?? now,
+    updatedAt: setItem?.updatedAt ?? setItem?.createdAt ?? now,
+    lastStudiedAt: setItem?.lastStudiedAt ?? null,
+  };
+}
 
 function sanitizeReviewSession(rawSession) {
   if (!rawSession || typeof rawSession !== "object") {
@@ -89,6 +135,213 @@ function sanitizeQuizSession(rawSession) {
   };
 }
 
+function getSessionTimestamp(progress) {
+  const timestamps = [
+    progress?.reviewSession?.updatedAt,
+    progress?.quizSession?.updatedAt,
+  ]
+    .map((value) => (value ? Date.parse(value) : 0))
+    .filter((value) => Number.isFinite(value));
+
+  if (timestamps.length) {
+    return Math.max(...timestamps);
+  }
+
+  return 0;
+}
+
+function mergeProgressEntry(baseProgress, incomingProgress) {
+  if (!baseProgress) {
+    return incomingProgress;
+  }
+
+  if (!incomingProgress) {
+    return baseProgress;
+  }
+
+  const baseTimestamp = getSessionTimestamp(baseProgress);
+  const incomingTimestamp = getSessionTimestamp(incomingProgress);
+
+  if (incomingTimestamp !== baseTimestamp) {
+    return incomingTimestamp > baseTimestamp ? incomingProgress : baseProgress;
+  }
+
+  const baseScore =
+    (baseProgress.completedCardIds?.length ?? 0) +
+    (baseProgress.stats?.totalKnown ?? 0) +
+    (baseProgress.stats?.totalUnknown ?? 0);
+  const incomingScore =
+    (incomingProgress.completedCardIds?.length ?? 0) +
+    (incomingProgress.stats?.totalKnown ?? 0) +
+    (incomingProgress.stats?.totalUnknown ?? 0);
+
+  return incomingScore > baseScore ? incomingProgress : baseProgress;
+}
+
+function mergeCollections(baseItems, incomingItems, timestampField = "updatedAt") {
+  const byId = new Map();
+
+  [...baseItems, ...incomingItems].forEach((item) => {
+    if (!item?.id) {
+      return;
+    }
+
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, item);
+      return;
+    }
+
+    const existingTime = Date.parse(existing[timestampField] ?? "") || 0;
+    const nextTime = Date.parse(item[timestampField] ?? "") || 0;
+    byId.set(item.id, nextTime >= existingTime ? item : existing);
+  });
+
+  return [...byId.values()];
+}
+
+function adoptExistingLocalState(state) {
+  const existingOwner = state.users.find((user) => user.id === SINGLE_USER_ID);
+  const fallbackName =
+    existingOwner?.name ??
+    state.users.find((user) => user?.name)?.name ??
+    "Sully";
+  const owner = createUser(fallbackName);
+  const folders = mergeCollections([], state.folders.map(normalizeFolder));
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  const sets = mergeCollections(
+    [],
+    state.sets
+      .map(normalizeSetItem)
+      .map((setItem) => ({
+        ...setItem,
+        folderId: setItem.folderId && folderIds.has(setItem.folderId) ? setItem.folderId : null,
+      }))
+      .filter((setItem) => setItem.cards.length),
+  );
+
+  const mergedSetProgress = {};
+  Object.values(state.progressByUser ?? {}).forEach((userProgress) => {
+    Object.entries(userProgress?.setProgress ?? {}).forEach(([setId, rawProgress]) => {
+      const sanitized = getSetProgress(
+        {
+          progressByUser: {
+            temp: {
+              setProgress: {
+                [setId]: rawProgress,
+              },
+            },
+          },
+        },
+        "temp",
+        setId,
+      );
+
+      mergedSetProgress[setId] = mergeProgressEntry(mergedSetProgress[setId], sanitized);
+    });
+  });
+
+  return {
+    currentUserId: SINGLE_USER_ID,
+    users: [owner],
+    folders,
+    sets,
+    progressByUser: {
+      [SINGLE_USER_ID]: {
+        setProgress: mergedSetProgress,
+        dailyGoal:
+          state.progressByUser?.[SINGLE_USER_ID]?.dailyGoal ??
+          Object.values(state.progressByUser ?? {}).find((item) => item?.dailyGoal)?.dailyGoal ??
+          20,
+      },
+    },
+  };
+}
+
+function extractOwnerSnapshot(state) {
+  const owner = state.users.find((user) => user.id === SINGLE_USER_ID) ?? createUser("Sully");
+
+  return {
+    user: {
+      name: owner.name,
+      email: owner.email,
+    },
+    folders: state.folders
+      .filter((folder) => folder.userId === SINGLE_USER_ID)
+      .map(normalizeFolder),
+    sets: state.sets
+      .filter((setItem) => setItem.userId === SINGLE_USER_ID)
+      .map(normalizeSetItem),
+    progress: getUserProgress(state, SINGLE_USER_ID),
+  };
+}
+
+function mergeOwnerSnapshotIntoState(state, snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return adoptExistingLocalState(state);
+  }
+
+  const localOwnerState = adoptExistingLocalState(state);
+  const remoteFolders = Array.isArray(snapshot.folders) ? snapshot.folders.map(normalizeFolder) : [];
+  const remoteSets = Array.isArray(snapshot.sets) ? snapshot.sets.map(normalizeSetItem) : [];
+  const mergedFolders = mergeCollections(localOwnerState.folders, remoteFolders);
+  const folderIds = new Set(mergedFolders.map((folder) => folder.id));
+  const mergedSets = mergeCollections(
+    localOwnerState.sets,
+    remoteSets.map((setItem) => ({
+      ...setItem,
+      folderId: setItem.folderId && folderIds.has(setItem.folderId) ? setItem.folderId : null,
+    })),
+  ).map((setItem) => ({
+    ...setItem,
+    folderId: setItem.folderId && folderIds.has(setItem.folderId) ? setItem.folderId : null,
+  }));
+
+  const remoteProgressSource =
+    snapshot.progress?.setProgress && typeof snapshot.progress.setProgress === "object"
+      ? snapshot.progress.setProgress
+      : {};
+  const mergedProgress = {
+    ...localOwnerState.progressByUser[SINGLE_USER_ID].setProgress,
+  };
+
+  Object.entries(remoteProgressSource).forEach(([setId, rawProgress]) => {
+    const sanitized = getSetProgress(
+      {
+        progressByUser: {
+          temp: {
+            setProgress: {
+              [setId]: rawProgress,
+            },
+          },
+        },
+      },
+      "temp",
+      setId,
+    );
+
+    mergedProgress[setId] = mergeProgressEntry(mergedProgress[setId], sanitized);
+  });
+
+  return {
+    currentUserId: SINGLE_USER_ID,
+    users: [
+      createUser(snapshot.user?.name || localOwnerState.users[0]?.name || "Sully"),
+    ],
+    folders: mergedFolders,
+    sets: mergedSets,
+    progressByUser: {
+      [SINGLE_USER_ID]: {
+        setProgress: mergedProgress,
+        dailyGoal:
+          snapshot.progress?.dailyGoal ??
+          localOwnerState.progressByUser[SINGLE_USER_ID].dailyGoal ??
+          20,
+      },
+    },
+  };
+}
+
 function getUserProgress(state, userId) {
   return (
     state.progressByUser[userId] ?? {
@@ -148,38 +401,64 @@ function createUser(name, email = "owner@sullys-grand-flashcards.local") {
 
 export const useAppStore = create((set, get) => ({
   ...initialState,
-  unlockApp: ({ password }) => {
+  unlockApp: async ({ password }) => {
     if (password !== SINGLE_USER_PASSWORD) {
       throw new Error("That password is not correct.");
     }
 
-    const state = get();
-    const existingUser = state.users.find((user) => user.id === SINGLE_USER_ID);
-
-    if (existingUser) {
-      set({
-        currentUserId: SINGLE_USER_ID,
-      });
-      return;
+    let nextLocalState = adoptExistingLocalState(get());
+    if (!nextLocalState.sets.length && !nextLocalState.folders.length) {
+      const owner = createUser("Sully");
+      const starter = createStarterContent(owner.id);
+      nextLocalState = {
+        ...nextLocalState,
+        users: [owner],
+        folders: starter.folders.map(normalizeFolder),
+        sets: starter.sets.map(normalizeSetItem),
+      };
     }
-
-    const user = createUser("Sully");
-    const starter = createStarterContent(user.id);
 
     set((current) => ({
       ...current,
-      currentUserId: user.id,
-      users: [user, ...current.users.filter((item) => item.id !== user.id)],
-      folders: [...current.folders, ...starter.folders],
-      sets: [...current.sets, ...starter.sets],
-      progressByUser: {
-        ...current.progressByUser,
-        [user.id]: {
-          setProgress: {},
-          dailyGoal: 20,
-        },
-      },
+      ...nextLocalState,
     }));
+
+    await get().restoreOwnerState();
+  },
+  restoreOwnerState: async () => {
+    if (get().currentUserId !== SINGLE_USER_ID) {
+      return;
+    }
+
+    try {
+      const remoteSnapshot = await fetchOwnerState();
+      if (!remoteSnapshot) {
+        await saveOwnerState(extractOwnerSnapshot(get()));
+        return;
+      }
+
+      set((current) => ({
+        ...current,
+        ...mergeOwnerSnapshotIntoState(current, remoteSnapshot),
+      }));
+
+      await saveOwnerState(extractOwnerSnapshot(get()));
+    } catch {
+      set((state) => ({
+        ui: {
+          ...state.ui,
+          notices: [
+            ...state.ui.notices.filter((notice) => notice.id !== "sync-warning"),
+            {
+              id: "sync-warning",
+              type: "warning",
+              message:
+                "Cloud sync is unavailable right now, so this device is using its local saved copy.",
+            },
+          ],
+        },
+      }));
+    }
   },
   logOut: () =>
     set({
@@ -684,6 +963,25 @@ export const useAppStore = create((set, get) => ({
 useAppStore.subscribe((state) => {
   saveState(state);
   document.documentElement.classList.toggle("dark", state.ui.theme === "dark");
+
+  if (state.currentUserId !== SINGLE_USER_ID) {
+    return;
+  }
+
+  if (remoteSaveTimer) {
+    clearTimeout(remoteSaveTimer);
+  }
+
+  remoteSaveTimer = setTimeout(() => {
+    const latestState = useAppStore.getState();
+    if (latestState.currentUserId !== SINGLE_USER_ID) {
+      return;
+    }
+
+    saveOwnerState(extractOwnerSnapshot(latestState)).catch(() => {
+      // Local persistence still works even if remote sync is temporarily unavailable.
+    });
+  }, 500);
 });
 
 document.documentElement.classList.toggle(
