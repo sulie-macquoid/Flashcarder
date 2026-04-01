@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Flag,
+  Maximize,
+  Minimize,
   Pencil,
   RefreshCcw,
   RotateCcw,
@@ -26,6 +28,7 @@ function accuracy(stats) {
 export default function StudyPage() {
   const navigate = useNavigate();
   const { setId } = useParams();
+  const studyShellRef = useRef(null);
   const currentUserId = useAppStore((state) => state.currentUserId);
   const sets = useAppStore((state) => state.sets);
   const progressByUser = useAppStore((state) => state.progressByUser);
@@ -65,6 +68,7 @@ export default function StudyPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [infiniteMode, setInfiniteMode] = useState(progress.learnSession?.infiniteMode ?? false);
   const [editableCards, setEditableCards] = useState(studySet?.cards ?? []);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (!studySet) {
@@ -78,6 +82,15 @@ export default function StudyPage() {
       setEditableCards(studySet.cards);
     }
   }, [studySet]);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
 
   const flashcardState = progress.flashcardState;
   const learnSession = progress.learnSession;
@@ -96,6 +109,21 @@ export default function StudyPage() {
     }
     return studySet.cards.find((card) => card.id === learnSession.currentCardId) ?? null;
   }, [learnSession, studySet]);
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (studyShellRef.current?.requestFullscreen) {
+        await studyShellRef.current.requestFullscreen();
+      }
+    } catch {
+      // If fullscreen is blocked by the browser, the study page still works normally.
+    }
+  }
 
   useKeyboardShortcuts(
     {
@@ -122,6 +150,12 @@ export default function StudyPage() {
           answerLearn(setId, "know");
         }
       },
+      f: () => {
+        toggleFullscreen();
+      },
+      F: () => {
+        toggleFullscreen();
+      },
     },
     Boolean(studySet),
   );
@@ -145,7 +179,10 @@ export default function StudyPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div
+      ref={studyShellRef}
+      className={`space-y-5 ${isFullscreen ? "min-h-screen overflow-y-auto bg-[var(--bg)] p-4 sm:p-6" : ""}`}
+    >
       <div className="glass-panel rounded-[2rem] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -189,6 +226,14 @@ export default function StudyPage() {
             >
               <Pencil size={16} />
               Edit during study
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-5 py-3 font-medium"
+            >
+              {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             </button>
           </div>
         </div>
@@ -236,7 +281,7 @@ export default function StudyPage() {
                         />
                       ) : null}
                       <p className="absolute bottom-8 text-sm text-white/70">
-                        Press Space or tap to flip
+                        Press Space to flip, F for fullscreen
                       </p>
                     </div>
                     <div className="card-face back absolute inset-0 rounded-[2.2rem] bg-[var(--secondary)] p-8 text-white">
